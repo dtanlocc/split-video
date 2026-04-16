@@ -1,0 +1,50 @@
+
+
+TOOL 2 AutoClip AI
+Quy trình 
+1. video dài,ngang - đọc ra thành SRT
+2. đưa lên gemini đọc SRT đó chuyển thành các đoạn hay rồi trả về json
+3.  cắt theo json đó
+4. dùng YOLO cắt đúng nhân vật
+5. edit lại (chèn sub ... )
+------------- tool chạy 2 trường hợp ( 1->2->3->4->5 hoặc 1->2->3-5)
+
+
+
+CHO GUI ĐIỀN CÁC THÔNG SỐ SAU:
+ 
+ b1
+[lang_code]
+
+ b2
+lang_name = "English",
+"Only include segments that are **at least 150 seconds** and **at most 300 seconds** long.\n"( trong phần prompt gửi lên gemini)
+
+b4
+output_size = (720,720); output_size=(720,720);ratio=(1,1)
+sharpen_strength = "medium"   # "low", "medium", "high"
+
+b5
+
+TITLE_COLOR = "#FFD700",  
+fill=(255, 0, 0, 160)
+MAX_WORDS_PER_LINE = 3 
+SUB_MARGIN_V = 250       # Khoảng cách từ dưới lên (Tăng số này để Sub bay cao lên giữa màn hình)
+SUB_FONT_SIZE = 85 
+WHISPER_MODEL_NAME = "base" # Có thể nâng lên 'small' hoặc 'medium' nếu VGA mạnh   
+
+
+* cho tui chỉnh font_title bằng cách 
+# tiếng Nhật
+FONT_TITLE_FILE = "C\\:/Windows/Fonts/YuGothM.ttc"  # Font cho tiêu đề (cần thoát dấu :)
+
+# tiếng hàn
+# FONT_TITLE_FILE = "C\\:/Windows/Fonts/malgun.ttf"  
+
+# tiếng latinh
+# FONT_TITLE_FILE = "C:/Windows/Fonts/arialbd.ttf"  # Font cho tiêu đề (cần thoát dấu :)
+
+
+
+
+-- sửa giúp tui chỗ key ( tui muốn Giới hạn theo Dung lượng Tháng *ví dụ giới hạn tổng số video đã đã render - như 600video/tháng*)
