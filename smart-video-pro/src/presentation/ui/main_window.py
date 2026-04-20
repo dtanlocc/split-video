@@ -1,0 +1,1 @@
+"""Main View using PySide6."""

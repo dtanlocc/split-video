@@ -1,0 +1,1 @@
+"""Domain models (VideoSegment, DetectionBox) - No dependencies."""
