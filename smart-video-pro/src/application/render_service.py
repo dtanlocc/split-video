@@ -1,6 +1,6 @@
 # src/application/render_service.py
 from pathlib import Path
-from src.domain.entities import RenderConfig
+from src.domain.schemas import RenderConfig
 from src.infrastructure.video.renderer_impl import VideoRendererImpl
 
 

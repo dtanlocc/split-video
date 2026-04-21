@@ -18,7 +18,7 @@ import torch
 from tqdm import tqdm
 from ultralytics import YOLO
 
-from src.domain.entities import CropConfig
+from src.domain.schemas import CropConfig
 from src.domain.interfaces import IYOLOCropper
 
 _STOP = object()

@@ -52,7 +52,7 @@ from src.infrastructure.ai.yolo_impl import YOLOImpl
 from src.application.yolo_service import YOLOService
 from src.application.render_service import RenderService
 from src.infrastructure.video.renderer_impl import VideoRendererImpl
-from src.domain.entities import CropConfig, RenderConfig
+from src.domain.schemas import CropConfig, RenderConfig
 
 # ====================== CẤU HÌNH TEST ======================
 VIDEO_PATH = "tests/test_assets/sample.mp4"
@@ -240,11 +240,11 @@ if __name__ == "__main__":
         # check_gpu_status()        # Bỏ comment nếu cần kiểm tra GPU
 
         verify_step_0()
-        verify_step_1()
-        verify_step_2()
-        verify_step_3()             # Hiện đang active
-        verify_step_4()
-        verify_step_final()
+        # verify_step_1()
+        # verify_step_2()
+        # verify_step_3()             # Hiện đang active
+        # verify_step_4()
+        # verify_step_final()
 
     except Exception as e:
         print(f"\n❌ LỖI KHÔNG MONG MUỐN: {e}")

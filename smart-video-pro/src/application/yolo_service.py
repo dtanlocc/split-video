@@ -1,7 +1,7 @@
 # src/application/yolo_service.py
 from pathlib import Path
 from src.domain.interfaces import IYOLOCropper
-from src.domain.entities import CropConfig
+from src.domain.schemas import CropConfig
 
 class YOLOService:
     """Application Layer - Orchestrator cho B4"""

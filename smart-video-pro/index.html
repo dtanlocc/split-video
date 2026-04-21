@@ -1,0 +1,1633 @@
+<style>
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0
+    }
+
+    :root {
+        --bg: #0c0d11;
+        --bg2: #12141a;
+        --bg3: #181b24;
+        --bg4: #1e2230;
+        --b: #ffffff0f;
+        --b2: #ffffff1a;
+        --b3: #ffffff2a;
+        --t: #dde1f0;
+        --t2: #8890aa;
+        --t3: #4a5068;
+        --acc: #6c63ff;
+        --acc2: #8880ff;
+        --acc3: #6c63ff22;
+        --gr: #1fc98a;
+        --gr2: #1fc98a1a;
+        --am: #f5a820;
+        --am2: #f5a8201a;
+        --rd: #ff5060;
+        --rd2: #ff50601a;
+        --tl: #18d4be;
+        --tl2: #18d4be1a;
+    }
+
+    .app {
+        background: var(--bg);
+        border-radius: 14px;
+        overflow: hidden;
+        border: 0.5px solid var(--b2);
+        font-family: var(--font-sans, system-ui, sans-serif);
+        color: var(--t)
+    }
+
+    /* -------- TOPBAR -------- */
+    .topbar {
+        background: var(--bg2);
+        border-bottom: 0.5px solid var(--b);
+        height: 46px;
+        display: flex;
+        align-items: center;
+        padding: 0 16px;
+        gap: 12px
+    }
+
+    .logo-box {
+        display: flex;
+        align-items: center;
+        gap: 8px
+    }
+
+    .logo-sq {
+        width: 26px;
+        height: 26px;
+        background: var(--acc);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center
+    }
+
+    .logo-sq svg {
+        width: 13px;
+        height: 13px;
+        fill: #fff
+    }
+
+    .logo-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--t);
+        letter-spacing: .3px
+    }
+
+    .logo-ver {
+        font-size: 10px;
+        color: var(--t3);
+        letter-spacing: .4px
+    }
+
+    .tb-sep {
+        flex: 1
+    }
+
+    .quota-pill {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--bg3);
+        border: 0.5px solid var(--b2);
+        border-radius: 20px;
+        padding: 4px 10px
+    }
+
+    .quota-label {
+        font-size: 10px;
+        color: var(--t3)
+    }
+
+    .quota-val {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--am)
+    }
+
+    .quota-bar-wrap {
+        width: 52px;
+        height: 3px;
+        background: var(--bg4);
+        border-radius: 2px
+    }
+
+    .quota-bar {
+        height: 3px;
+        border-radius: 2px;
+        background: var(--am);
+        width: 42%
+    }
+
+    .tb-nav {
+        display: flex;
+        gap: 2px
+    }
+
+    .tb-btn {
+        padding: 5px 12px;
+        border-radius: 6px;
+        font-size: 11px;
+        color: var(--t2);
+        cursor: pointer;
+        border: 0.5px solid transparent;
+        background: transparent;
+        transition: all .15s
+    }
+
+    .tb-btn:hover {
+        background: var(--bg3);
+        color: var(--t);
+        border-color: var(--b2)
+    }
+
+    .tb-btn.active {
+        background: var(--acc3);
+        color: var(--acc2);
+        border-color: var(--acc)
+    }
+
+    /* -------- SCREENS -------- */
+    .screens {
+        position: relative
+    }
+
+    .screen {
+        display: none;
+        padding: 16px
+    }
+
+    .screen.visible {
+        display: block
+    }
+
+    /* -------- MAIN SCREEN -------- */
+    .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 260px;
+        gap: 12px
+    }
+
+    /* dropzone */
+    .dropzone {
+        border: 1.5px dashed var(--b3);
+        border-radius: 10px;
+        padding: 28px 16px;
+        text-align: center;
+        cursor: pointer;
+        transition: all .2s;
+        margin-bottom: 12px
+    }
+
+    .dropzone:hover,
+    .dropzone.drag {
+        border-color: var(--acc);
+        background: var(--acc3)
+    }
+
+    .dz-icon {
+        width: 40px;
+        height: 40px;
+        background: var(--bg3);
+        border-radius: 9px;
+        margin: 0 auto 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center
+    }
+
+    .dz-icon svg {
+        width: 20px;
+        height: 20px
+    }
+
+    .dz-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--t);
+        margin-bottom: 4px
+    }
+
+    .dz-sub {
+        font-size: 11px;
+        color: var(--t3)
+    }
+
+    .dz-browse {
+        display: inline-block;
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--acc2);
+        text-decoration: underline;
+        cursor: pointer
+    }
+
+    /* file list */
+    .file-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        margin-bottom: 12px
+    }
+
+    .file-row {
+        background: var(--bg3);
+        border: 0.5px solid var(--b);
+        border-radius: 8px;
+        padding: 8px 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: all .15s
+    }
+
+    .file-row:hover {
+        border-color: var(--b3)
+    }
+
+    .file-row.selected {
+        border-color: var(--acc);
+        background: var(--acc3)
+    }
+
+    .fv-icon {
+        width: 30px;
+        height: 19px;
+        background: var(--tl2);
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0
+    }
+
+    .fv-icon svg {
+        width: 10px;
+        height: 10px;
+        fill: var(--tl)
+    }
+
+    .fv-name {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--t);
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis
+    }
+
+    .fv-meta {
+        font-size: 10px;
+        color: var(--t3);
+        flex-shrink: 0
+    }
+
+    .fv-badge {
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        flex-shrink: 0
+    }
+
+    .fv-badge.done {
+        background: var(--gr2);
+        color: var(--gr)
+    }
+
+    .fv-badge.proc {
+        background: var(--acc3);
+        color: var(--acc2)
+    }
+
+    .fv-badge.wait {
+        background: var(--bg4);
+        color: var(--t3)
+    }
+
+    .fv-play {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 0.5px solid var(--b2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0
+    }
+
+    .fv-play svg {
+        width: 8px;
+        height: 8px;
+        fill: var(--t2)
+    }
+
+    .fv-play:hover {
+        border-color: var(--acc);
+        background: var(--acc3)
+    }
+
+    .fv-play:hover svg {
+        fill: var(--acc2)
+    }
+
+    /* pipeline mode selector */
+    .mode-row {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 12px
+    }
+
+    .mode-opt {
+        flex: 1;
+        border: 0.5px solid var(--b2);
+        border-radius: 7px;
+        padding: 8px 10px;
+        cursor: pointer;
+        transition: all .15s;
+        text-align: center
+    }
+
+    .mode-opt:hover {
+        border-color: var(--b3)
+    }
+
+    .mode-opt.selected {
+        border-color: var(--acc);
+        background: var(--acc3)
+    }
+
+    .mode-opt-label {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--t)
+    }
+
+    .mode-opt-desc {
+        font-size: 10px;
+        color: var(--t3);
+        margin-top: 2px
+    }
+
+    /* run button */
+    .run-btn {
+        width: 100%;
+        padding: 11px;
+        background: var(--acc);
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #fff;
+        cursor: pointer;
+        text-align: center;
+        border: none;
+        transition: all .15s
+    }
+
+    .run-btn:hover {
+        background: var(--acc2)
+    }
+
+    .run-btn:disabled {
+        background: var(--bg4);
+        color: var(--t3);
+        cursor: not-allowed
+    }
+
+    .run-btn.running {
+        background: var(--bg4);
+        color: var(--gr);
+        border: 0.5px solid var(--gr2)
+    }
+
+    /* --- RIGHT PANEL --- */
+    .rpanel {
+        display: flex;
+        flex-direction: column;
+        gap: 10px
+    }
+
+    /* progress card */
+    .prog-card {
+        background: var(--bg3);
+        border: 0.5px solid var(--b);
+        border-radius: 10px;
+        padding: 14px
+    }
+
+    .prog-title {
+        font-size: 11px;
+        color: var(--t3);
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: .6px
+    }
+
+    .prog-big {
+        font-size: 36px;
+        font-weight: 500;
+        color: var(--t);
+        line-height: 1;
+        margin-bottom: 4px
+    }
+
+    .prog-sub {
+        font-size: 11px;
+        color: var(--t3);
+        margin-bottom: 12px
+    }
+
+    .big-bar-wrap {
+        background: var(--bg4);
+        border-radius: 4px;
+        height: 6px;
+        width: 100%;
+        overflow: hidden;
+        margin-bottom: 8px
+    }
+
+    .big-bar {
+        height: 6px;
+        border-radius: 4px;
+        background: var(--acc);
+        transition: width .4s
+    }
+
+    .prog-step-label {
+        font-size: 11px;
+        color: var(--acc2)
+    }
+
+    .prog-eta {
+        font-size: 10px;
+        color: var(--t3);
+        margin-top: 3px
+    }
+
+    /* stage mini bars */
+    .stages {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px
+    }
+
+    .stage-row {
+        display: flex;
+        align-items: center;
+        gap: 7px
+    }
+
+    .stage-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0
+    }
+
+    .stage-dot.done {
+        background: var(--gr)
+    }
+
+    .stage-dot.run {
+        background: var(--acc);
+        animation: p 1.2s infinite
+    }
+
+    .stage-dot.wait {
+        background: var(--t3)
+    }
+
+    @keyframes p {
+
+        0%,
+        100% {
+            opacity: 1
+        }
+
+        50% {
+            opacity: .3
+        }
+    }
+
+    .stage-name {
+        font-size: 10px;
+        color: var(--t2);
+        flex: 1
+    }
+
+    .stage-pct {
+        font-size: 10px;
+        color: var(--t3)
+    }
+
+    /* stats row */
+    .stats-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px
+    }
+
+    .stat-c {
+        background: var(--bg3);
+        border-radius: 7px;
+        padding: 8px 10px;
+        border: 0.5px solid var(--b)
+    }
+
+    .stat-l {
+        font-size: 10px;
+        color: var(--t3);
+        margin-bottom: 3px
+    }
+
+    .stat-v {
+        font-size: 17px;
+        font-weight: 500
+    }
+
+    .stat-v.gr {
+        color: var(--gr)
+    }
+
+    .stat-v.acc {
+        color: var(--acc2)
+    }
+
+    .stat-v.am {
+        color: var(--am)
+    }
+
+    .stat-v.tl {
+        color: var(--tl)
+    }
+
+    /* log panel */
+    .log-card {
+        background: var(--bg3);
+        border: 0.5px solid var(--b);
+        border-radius: 10px;
+        overflow: hidden
+    }
+
+    .log-header {
+        padding: 8px 12px;
+        border-bottom: 0.5px solid var(--b);
+        display: flex;
+        align-items: center;
+        gap: 8px
+    }
+
+    .log-title {
+        font-size: 10px;
+        color: var(--t3);
+        text-transform: uppercase;
+        letter-spacing: .6px;
+        flex: 1
+    }
+
+    .log-clear {
+        font-size: 10px;
+        color: var(--t3);
+        cursor: pointer
+    }
+
+    .log-clear:hover {
+        color: var(--t2)
+    }
+
+    .log-body {
+        font-family: var(--font-mono, monospace);
+        font-size: 10px;
+        line-height: 1.8;
+        padding: 8px 10px;
+        height: 110px;
+        overflow-y: auto;
+        background: var(--bg2)
+    }
+
+    .ll {
+        display: flex;
+        gap: 6px
+    }
+
+    .lt {
+        color: var(--t3);
+        flex-shrink: 0
+    }
+
+    .lok {
+        color: var(--gr)
+    }
+
+    .linf {
+        color: var(--acc2)
+    }
+
+    .lwarn {
+        color: var(--am)
+    }
+
+    .lerr {
+        color: var(--rd)
+    }
+
+    .ldim {
+        color: var(--t3)
+    }
+
+    /* -------- SETTINGS SCREEN -------- */
+    .settings-layout {
+        display: grid;
+        grid-template-columns: 160px 1fr;
+        gap: 0
+    }
+
+    .s-nav {
+        border-right: 0.5px solid var(--b);
+        padding: 4px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px
+    }
+
+    .s-nav-item {
+        padding: 7px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        color: var(--t2);
+        cursor: pointer;
+        transition: all .15s
+    }
+
+    .s-nav-item:hover {
+        background: var(--bg3);
+        color: var(--t)
+    }
+
+    .s-nav-item.active {
+        background: var(--acc3);
+        color: var(--acc2)
+    }
+
+    .s-content {
+        padding: 16px;
+        overflow-y: auto;
+        max-height: 540px
+    }
+
+    .s-section {
+        margin-bottom: 20px
+    }
+
+    .s-sec-title {
+        font-size: 10px;
+        color: var(--t3);
+        text-transform: uppercase;
+        letter-spacing: .7px;
+        margin-bottom: 10px;
+        padding-bottom: 6px;
+        border-bottom: 0.5px solid var(--b)
+    }
+
+    .s-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 0;
+        border-bottom: 0.5px solid var(--b)
+    }
+
+    .s-row:last-child {
+        border-bottom: none
+    }
+
+    .s-label {
+        font-size: 12px;
+        color: var(--t2);
+        flex: 1
+    }
+
+    .s-hint {
+        font-size: 10px;
+        color: var(--t3);
+        margin-top: 1px
+    }
+
+    .s-inp {
+        background: var(--bg2);
+        border: 0.5px solid var(--b2);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 11px;
+        color: var(--t);
+        width: 140px
+    }
+
+    .s-inp:focus {
+        outline: none;
+        border-color: var(--acc)
+    }
+
+    .s-sel {
+        background: var(--bg2);
+        border: 0.5px solid var(--b2);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 11px;
+        color: var(--t);
+        width: 140px
+    }
+
+    .s-sel option {
+        background: var(--bg2)
+    }
+
+    .s-toggle {
+        width: 32px;
+        height: 17px;
+        background: var(--acc);
+        border-radius: 10px;
+        position: relative;
+        cursor: pointer;
+        flex-shrink: 0
+    }
+
+    .s-toggle::after {
+        content: '';
+        position: absolute;
+        right: 2px;
+        top: 2px;
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        background: #fff
+    }
+
+    .s-toggle.off {
+        background: var(--bg4)
+    }
+
+    .s-toggle.off::after {
+        right: auto;
+        left: 2px
+    }
+
+    .s-color-row {
+        display: flex;
+        align-items: center;
+        gap: 6px
+    }
+
+    .s-color-swatch {
+        width: 22px;
+        height: 22px;
+        border-radius: 4px;
+        border: 0.5px solid var(--b2);
+        cursor: pointer
+    }
+
+    .s-inp-sm {
+        background: var(--bg2);
+        border: 0.5px solid var(--b2);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 11px;
+        color: var(--t);
+        width: 80px
+    }
+
+    .font-btn-row {
+        display: flex;
+        gap: 4px
+    }
+
+    .font-btn {
+        padding: 4px 8px;
+        border-radius: 5px;
+        font-size: 10px;
+        background: var(--bg2);
+        border: 0.5px solid var(--b2);
+        color: var(--t2);
+        cursor: pointer
+    }
+
+    .font-btn.active {
+        background: var(--acc3);
+        border-color: var(--acc);
+        color: var(--acc2)
+    }
+
+    .quota-section {
+        background: var(--bg3);
+        border: 0.5px solid var(--b);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px
+    }
+
+    .quota-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px
+    }
+
+    .quota-big {
+        font-size: 22px;
+        font-weight: 500;
+        color: var(--am)
+    }
+
+    .quota-track {
+        flex: 1;
+        height: 6px;
+        background: var(--bg4);
+        border-radius: 3px;
+        overflow: hidden
+    }
+
+    .quota-fill {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--am);
+        width: 42%
+    }
+
+    .quota-reset {
+        font-size: 10px;
+        color: var(--t3);
+        margin-top: 4px
+    }
+
+    .save-btn {
+        padding: 8px 20px;
+        background: var(--acc);
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 500;
+        color: #fff;
+        cursor: pointer;
+        border: none;
+        margin-top: 4px
+    }
+
+    .save-btn:hover {
+        background: var(--acc2)
+    }
+
+    /* -------- OUTPUTS SCREEN -------- */
+    .outputs-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 8px
+    }
+
+    .out-card {
+        background: var(--bg3);
+        border: 0.5px solid var(--b);
+        border-radius: 8px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all .15s
+    }
+
+    .out-card:hover {
+        border-color: var(--b3)
+    }
+
+    .out-thumb {
+        height: 84px;
+        background: var(--bg4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative
+    }
+
+    .out-thumb-inner {
+        width: 48px;
+        height: 84px;
+        background: var(--bg2);
+        border: 0.5px solid var(--b2);
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center
+    }
+
+    .out-thumb-inner svg {
+        width: 16px;
+        height: 16px;
+        fill: var(--acc2)
+    }
+
+    .out-dur {
+        position: absolute;
+        bottom: 4px;
+        right: 6px;
+        font-size: 9px;
+        color: var(--t2);
+        background: var(--bg);
+        padding: 1px 5px;
+        border-radius: 4px
+    }
+
+    .out-info {
+        padding: 7px 8px
+    }
+
+    .out-name {
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--t);
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis
+    }
+
+    .out-meta {
+        font-size: 9px;
+        color: var(--t3)
+    }
+
+    /* -------- MINI VIDEO PLAYER (modal) -------- */
+    .player-overlay {
+        display: none;
+        min-height: 420px;
+        background: rgba(0, 0, 0, .7);
+        border-radius: 14px;
+        align-items: center;
+        justify-content: center
+    }
+
+    .player-overlay.visible {
+        display: flex
+    }
+
+    .player-modal {
+        background: var(--bg2);
+        border: 0.5px solid var(--b2);
+        border-radius: 12px;
+        width: 320px;
+        padding: 14px
+    }
+
+    .player-title {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--t);
+        margin-bottom: 10px
+    }
+
+    .player-screen {
+        width: 100%;
+        aspect-ratio: 9/16;
+        max-height: 240px;
+        background: var(--bg);
+        border-radius: 7px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 10px
+    }
+
+    .player-screen svg {
+        width: 32px;
+        height: 32px;
+        fill: var(--t3)
+    }
+
+    .player-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px
+    }
+
+    .play-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--acc);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0
+    }
+
+    .play-btn svg {
+        width: 11px;
+        height: 11px;
+        fill: #fff
+    }
+
+    .seek-bar {
+        flex: 1;
+        height: 3px;
+        background: var(--bg4);
+        border-radius: 2px;
+        cursor: pointer
+    }
+
+    .seek-fill {
+        height: 3px;
+        background: var(--acc);
+        border-radius: 2px;
+        width: 35%
+    }
+
+    .time-label {
+        font-size: 10px;
+        color: var(--t3);
+        flex-shrink: 0
+    }
+
+    .player-close {
+        font-size: 11px;
+        color: var(--t3);
+        cursor: pointer;
+        text-align: right;
+        margin-top: 8px
+    }
+
+    .player-close:hover {
+        color: var(--t)
+    }
+</style>
+
+<h2 class="sr-only">AutoClip AI — giao diện ứng dụng xử lý video tự động với màn hình chạy pipeline, cài đặt chi tiết và
+    xem video đầu ra.</h2>
+
+<div class="app">
+    <div class="topbar">
+        <div class="logo-box">
+            <div class="logo-sq"><svg viewBox="0 0 24 24">
+                    <path d="M5 3l14 9-14 9V3z" />
+                </svg></div>
+            <div>
+                <div class="logo-name">AutoClip AI</div>
+                <div class="logo-ver">v2.1.0</div>
+            </div>
+        </div>
+        <div class="tb-sep"></div>
+        <div class="quota-pill">
+            <span class="quota-label">Tháng này</span>
+            <div class="quota-bar-wrap">
+                <div class="quota-bar"></div>
+            </div>
+            <span class="quota-val">252 / 600</span>
+        </div>
+        <div class="tb-nav">
+            <div class="tb-btn active" onclick="showScreen('main',this)">Run</div>
+            <div class="tb-btn" onclick="showScreen('outputs',this)">Outputs</div>
+            <div class="tb-btn" onclick="showScreen('settings',this)">Settings</div>
+        </div>
+    </div>
+
+    <div class="screens">
+
+        <!-- ===== MAIN SCREEN ===== -->
+        <div id="screen-main" class="screen visible">
+            <div class="main-layout">
+                <div>
+                    <div class="dropzone" id="dz" ondragover="event.preventDefault();this.classList.add('drag')"
+                        ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+                        <div class="dz-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="1.5">
+                                <path d="M3 7h18M3 12h18M3 17h18" />
+                            </svg>
+                        </div>
+                        <div class="dz-title">Kéo thư mục video vào đây</div>
+                        <div class="dz-sub">hoặc chọn thư mục thủ công</div>
+                        <div class="dz-browse" onclick="loadSampleFiles()">Chọn thư mục...</div>
+                    </div>
+
+                    <div class="file-list" id="file-list"></div>
+
+                    <div
+                        style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px">
+                        Chế độ pipeline</div>
+                    <div class="mode-row">
+                        <div class="mode-opt selected" onclick="selectMode(this,'with-yolo')">
+                            <div class="mode-opt-label">Full pipeline</div>
+                            <div class="mode-opt-desc">bước 1 → 2 → 3 → 4 → 5</div>
+                        </div>
+                        <div class="mode-opt" onclick="selectMode(this,'no-yolo')">
+                            <div class="mode-opt-label">Bỏ YOLO crop</div>
+                            <div class="mode-opt-desc">bước 1 → 2 → 3 → 5</div>
+                        </div>
+                    </div>
+
+                    <button class="run-btn" id="run-btn" onclick="toggleRun()">Bắt đầu xử lý</button>
+                </div>
+
+                <div class="rpanel">
+                    <div class="prog-card">
+                        <div class="prog-title">Tiến độ tổng</div>
+                        <div class="prog-big" id="prog-pct">0%</div>
+                        <div class="prog-sub" id="prog-vid">Chưa bắt đầu</div>
+                        <div class="big-bar-wrap">
+                            <div class="big-bar" id="big-bar" style="width:0%"></div>
+                        </div>
+                        <div class="prog-step-label" id="prog-step-label">—</div>
+                        <div class="prog-eta" id="prog-eta"></div>
+                        <div class="stages" id="stages">
+                            <div class="stage-row">
+                                <div class="stage-dot wait" id="d0"></div>
+                                <div class="stage-name">Transcribe (Whisper)</div>
+                                <div class="stage-pct" id="p0">—</div>
+                            </div>
+                            <div class="stage-row">
+                                <div class="stage-dot wait" id="d1"></div>
+                                <div class="stage-name">Gemini Analysis</div>
+                                <div class="stage-pct" id="p1">—</div>
+                            </div>
+                            <div class="stage-row">
+                                <div class="stage-dot wait" id="d2"></div>
+                                <div class="stage-name">FFmpeg Cut</div>
+                                <div class="stage-pct" id="p2">—</div>
+                            </div>
+                            <div class="stage-row">
+                                <div class="stage-dot wait" id="d3" style="display:inline-block"></div>
+                                <div class="stage-name" id="sn3">YOLO Crop</div>
+                                <div class="stage-pct" id="p3">—</div>
+                            </div>
+                            <div class="stage-row">
+                                <div class="stage-dot wait" id="d4"></div>
+                                <div class="stage-name">Render + Sub</div>
+                                <div class="stage-pct" id="p4">—</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-row">
+                        <div class="stat-c">
+                            <div class="stat-l">Video xong</div>
+                            <div class="stat-v gr" id="sv-done">0</div>
+                        </div>
+                        <div class="stat-c">
+                            <div class="stat-l">Clips tạo ra</div>
+                            <div class="stat-v acc" id="sv-clips">0</div>
+                        </div>
+                        <div class="stat-c">
+                            <div class="stat-l">Thời gian</div>
+                            <div class="stat-v am" id="sv-time">—</div>
+                        </div>
+                        <div class="stat-c">
+                            <div class="stat-l">Quota còn</div>
+                            <div class="stat-v tl" id="sv-quota">348</div>
+                        </div>
+                    </div>
+
+                    <div class="log-card">
+                        <div class="log-header">
+                            <div class="log-title">System log</div>
+                            <div class="log-clear" onclick="clearLog()">xóa</div>
+                        </div>
+                        <div class="log-body" id="log-body">
+                            <div class="ll"><span class="lt">00:00</span><span class="ldim">Ready — chờ video...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== OUTPUTS SCREEN ===== -->
+        <div id="screen-outputs" class="screen">
+            <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">
+                Video đã xử lý — bấm để xem</div>
+            <div class="outputs-grid" id="out-grid"></div>
+            <div class="player-overlay" id="player-overlay">
+                <div class="player-modal">
+                    <div class="player-title" id="player-fname">highlight_01.mp4</div>
+                    <div class="player-screen">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M5 3l14 9-14 9V3z" />
+                        </svg>
+                    </div>
+                    <div class="player-controls">
+                        <div class="play-btn"><svg viewBox="0 0 24 24">
+                                <path d="M5 3l14 9-14 9V3z" />
+                            </svg></div>
+                        <div class="seek-bar">
+                            <div class="seek-fill"></div>
+                        </div>
+                        <div class="time-label">0:35 / 1:42</div>
+                    </div>
+                    <div class="player-close" onclick="closePlayer()">Đóng</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== SETTINGS SCREEN ===== -->
+        <div id="screen-settings" class="screen">
+            <div class="settings-layout">
+                <div class="s-nav">
+                    <div class="s-nav-item active" onclick="showSTab('s-general',this)">Chung</div>
+                    <div class="s-nav-item" onclick="showSTab('s-b1',this)">Bước 1 — STT</div>
+                    <div class="s-nav-item" onclick="showSTab('s-b2',this)">Bước 2 — Gemini</div>
+                    <div class="s-nav-item" onclick="showSTab('s-b4',this)">Bước 4 — YOLO</div>
+                    <div class="s-nav-item" onclick="showSTab('s-b5',this)">Bước 5 — Render</div>
+                    <div class="s-nav-item" onclick="showSTab('s-quota',this)">Quota & API</div>
+                </div>
+
+                <div class="s-content">
+
+                    <!-- GENERAL -->
+                    <div id="s-general" class="s-block">
+                        <div class="s-section">
+                            <div class="s-sec-title">Thư mục</div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Output folder</div>
+                                    <div class="s-hint">Nơi lưu video đã xử lý</div>
+                                </div>
+                                <input class="s-inp" value="verify_results/final">
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Temp folder</div>
+                                </div>
+                                <input class="s-inp" value="verify_results/tmp">
+                            </div>
+                        </div>
+                        <div class="s-section">
+                            <div class="s-sec-title">Hiển thị</div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Hiển thị log lỗi</div>
+                                    <div class="s-hint">Ẩn log thường, chỉ hiện lỗi</div>
+                                </div>
+                                <div class="s-toggle" onclick="this.classList.toggle('off')"></div>
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Thông báo hoàn thành</div>
+                                </div>
+                                <div class="s-toggle" onclick="this.classList.toggle('off')"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- B1 -->
+                    <div id="s-b1" class="s-block" style="display:none">
+                        <div class="s-section">
+                            <div class="s-sec-title">Bước 1 — Whisper transcribe</div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Ngôn ngữ</div>
+                                    <div class="s-hint">Mã ngôn ngữ ISO 639-1</div>
+                                </div>
+                                <input class="s-inp" value="ja" placeholder="en, ja, ko, vi...">
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Model Whisper</div>
+                                    <div class="s-hint">Mạnh hơn = chậm hơn</div>
+                                </div>
+                                <select class="s-sel">
+                                    <option>base</option>
+                                    <option>small</option>
+                                    <option selected>medium</option>
+                                    <option>large-v3</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- B2 -->
+                    <div id="s-b2" class="s-block" style="display:none">
+                        <div class="s-section">
+                            <div class="s-sec-title">Bước 2 — Gemini highlight analysis</div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Thời lượng tối thiểu</div>
+                                    <div class="s-hint">Giây / đoạn</div>
+                                </div>
+                                <input class="s-inp-sm" type="number" value="150"> <span
+                                    style="font-size:11px;color:var(--t3)">giây</span>
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Thời lượng tối đa</div>
+                                </div>
+                                <input class="s-inp-sm" type="number" value="300"> <span
+                                    style="font-size:11px;color:var(--t3)">giây</span>
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Model Gemini</div>
+                                </div>
+                                <select class="s-sel">
+                                    <option selected>gemini-2.5-flash</option>
+                                    <option>gemini-2.0-pro</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- B4 -->
+                    <div id="s-b4" class="s-block" style="display:none">
+                        <div class="s-section">
+                            <div class="s-sec-title">Bước 4 — YOLO smart crop</div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Sharpen strength</div>
+                                </div>
+                                <select class="s-sel">
+                                    <option>low</option>
+                                    <option selected>medium</option>
+                                    <option>high</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- B5 -->
+                    <div id="s-b5" class="s-block" style="display:none">
+                        <div class="s-section">
+                            <div class="s-sec-title">Subtitle</div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Màu tiêu đề</div>
+                                </div>
+                                <div class="s-color-row">
+                                    <div class="s-color-swatch" style="background:#FFD700" id="title-swatch"></div>
+                                    <input class="s-inp-sm" value="#FFD700"
+                                        oninput="document.getElementById('title-swatch').style.background=this.value">
+                                </div>
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Màu nền sub (RGBA)</div>
+                                </div>
+                                <input class="s-inp" value="255, 0, 0, 160" placeholder="R,G,B,A">
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Từ tối đa / dòng</div>
+                                </div>
+                                <input class="s-inp-sm" type="number" value="3">
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Sub margin V</div>
+                                    <div class="s-hint">Tăng = sub lên cao hơn</div>
+                                </div>
+                                <input class="s-inp-sm" type="number" value="250">
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Font size</div>
+                                </div>
+                                <input class="s-inp-sm" type="number" value="85">
+                            </div>
+                        </div>
+                        <div class="s-section">
+                            <div class="s-sec-title">Font tiêu đề</div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Ngôn ngữ font</div>
+                                </div>
+                                <div class="font-btn-row">
+                                    <div class="font-btn active" onclick="setFont(this,'YuGothM.ttc')">Nhật</div>
+                                    <div class="font-btn" onclick="setFont(this,'malgun.ttf')">Hàn</div>
+                                    <div class="font-btn" onclick="setFont(this,'arialbd.ttf')">Latin</div>
+                                </div>
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Font path</div>
+                                </div>
+                                <input class="s-inp" id="font-path-inp" value="C\\:/Windows/Fonts/YuGothM.ttc">
+                            </div>
+                        </div>
+                        <div class="s-section">
+                            <div class="s-sec-title">Render</div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Video speed</div>
+                                </div>
+                                <input class="s-inp-sm" type="number" step="0.01" value="1.03">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- QUOTA -->
+                    <div id="s-quota" class="s-block" style="display:none">
+                        <div class="s-section">
+                            <div class="s-sec-title">Giới hạn sử dụng tháng</div>
+                            <div class="quota-section">
+                                <div class="quota-row">
+                                    <div>
+                                        <div style="font-size:10px;color:var(--t3);margin-bottom:2px">Video đã render
+                                            tháng này</div>
+                                        <div style="display:flex;align-items:baseline;gap:6px"><span
+                                                class="quota-big">252</span><span
+                                                style="font-size:11px;color:var(--t3)">/ 600 video</span></div>
+                                    </div>
+                                </div>
+                                <div class="quota-track">
+                                    <div class="quota-fill"></div>
+                                </div>
+                                <div class="quota-reset">Reset vào: 01/05/2026 · còn 10 ngày</div>
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Giới hạn / tháng</div>
+                                    <div class="s-hint">Số video tối đa được render</div>
+                                </div>
+                                <input class="s-inp-sm" type="number" value="600">
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Cảnh báo khi đạt</div>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:6px">
+                                    <input class="s-inp-sm" type="number" value="80"> <span
+                                        style="font-size:11px;color:var(--t3)">%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="s-section">
+                            <div class="s-sec-title">API Keys</div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Gemini API Key</div>
+                                </div>
+                                <input class="s-inp" type="password" value="AIzaSyBQ••••••V5Y">
+                            </div>
+                            <div class="s-row">
+                                <div>
+                                    <div class="s-label">Key rotation</div>
+                                    <div class="s-hint">Dùng key tiếp theo khi hết quota</div>
+                                </div>
+                                <div class="s-toggle" onclick="this.classList.toggle('off')"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="save-btn" onclick="saveSettings()">Lưu cài đặt</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    const sampleFiles = [
+        { name: 'stream_20240418.mp4', size: '4.2 GB', dur: '2h14m', status: 'wait' }
+    ];
+    let running = false;
+    let ws = null; // Biến lưu kết nối WebSocket tới Python
+
+    // Các hàm giao diện cơ bản (Giữ nguyên của bạn)
+    function showScreen(id, btn) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+        document.getElementById('screen-' + id).classList.add('visible');
+        document.querySelectorAll('.tb-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+    function showSTab(id, btn) {
+        document.querySelectorAll('.s-block').forEach(b => b.style.display = 'none');
+        document.getElementById(id).style.display = 'block';
+        document.querySelectorAll('.s-nav-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+    function loadSampleFiles() {
+        const fl = document.getElementById('file-list');
+        fl.innerHTML = '';
+        sampleFiles.forEach((f, i) => {
+            const el = document.createElement('div');
+            el.className = 'file-row' + (i === 0 ? ' selected' : '');
+            el.innerHTML = `<div class="fv-icon"><svg viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg></div><div class="fv-name">${f.name}</div><div class="fv-meta">${f.size} · ${f.dur}</div><span class="fv-badge ${f.status}">Chờ</span>`;
+            fl.appendChild(el);
+        });
+    }
+    function handleDrop(e) {
+        e.preventDefault();
+        document.getElementById('dz').classList.remove('drag');
+        loadSampleFiles();
+    }
+
+    let currentMode = 'with-yolo'; // Mặc định chạy Full
+    function selectMode(el, mode) {
+        document.querySelectorAll('.mode-opt').forEach(m => m.classList.remove('selected'));
+        el.classList.add('selected');
+        currentMode = mode;
+        const d3 = document.getElementById('d3');
+        const sn3 = document.getElementById('sn3');
+        if (mode === 'no-yolo') { d3.style.display = 'none'; sn3.parentElement.style.display = 'none'; }
+        else { d3.style.display = 'inline-block'; sn3.parentElement.style.display = 'flex'; }
+    }
+
+    // HÀM IN LOG RA GIAO DIỆN
+    function addLog(type, msg) {
+        const body = document.getElementById('log-body');
+        const el = document.createElement('div'); el.className = 'll';
+        const t = new Date(); const ts = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') + ':' + String(t.getSeconds()).padStart(2, '0');
+        const cls = type === 'ok' ? 'lok' : type === 'inf' ? 'linf' : type === 'warn' ? 'lwarn' : type === 'err' ? 'lerr' : 'ldim';
+        el.innerHTML = `<span class="lt">${ts}</span><span class="${cls}">${msg}</span>`;
+        body.appendChild(el); body.scrollTop = body.scrollHeight;
+    }
+    function clearLog() { document.getElementById('log-body').innerHTML = ''; }
+
+    // ==========================================
+    // NƠI GIAO DIỆN HTML NÓI CHUYỆN VỚI PYTHON
+    // ==========================================
+    function toggleRun() {
+        const btn = document.getElementById('run-btn');
+        if (running) return;
+
+        running = true;
+        btn.textContent = 'Đang kết nối AI...';
+        btn.classList.add('running');
+
+        // Reset UI
+        clearLog();
+        document.getElementById('prog-pct').textContent = '0%';
+        document.getElementById('big-bar').style.width = '0%';
+        for (let i = 0; i < 5; i++) {
+            document.getElementById('d' + i).className = 'stage-dot wait';
+            document.getElementById('p' + i).textContent = '—';
+        }
+
+        addLog('inf', 'Đang tìm kiếm Động cơ Python...');
+
+        // 1. MỞ CỔNG KẾT NỐI VỚI PYTHON (api_server.py)
+        ws = new WebSocket("ws://127.0.0.1:8999/ws/run");
+
+        // 2. NẾU KẾT NỐI THÀNH CÔNG
+        ws.onopen = function () {
+            addLog('ok', 'Đã kết nối Backend. Bắt đầu gửi lệnh!');
+            // Gói các cấu hình thành JSON gửi xuống Python
+            const configData = {
+                mode: currentMode,
+                whisper_model: 'medium' // Có thể lấy từ thẻ select trong Settings sau
+            };
+            ws.send(JSON.stringify(configData));
+        };
+
+        // 3. LẮNG NGHE PYTHON GỬI TIẾN ĐỘ TRẢ VỀ
+        ws.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+            // Dữ liệu từ Python có dạng: {stage: 0, pct: 15, msg: "...", status: "inf"}
+
+            addLog(data.status, data.msg); // In log
+
+            // Cập nhật thanh tiến trình (Progress Bar)
+            if (data.stage >= 0 && data.stage <= 4) {
+                document.getElementById('prog-step-label').textContent = data.msg;
+                document.getElementById('big-bar').style.width = data.pct + '%';
+                document.getElementById('prog-pct').textContent = data.pct + '%';
+
+                // Cập nhật chấm tròn các bước
+                for (let i = 0; i < 5; i++) {
+                    const d = document.getElementById('d' + i);
+                    const p = document.getElementById('p' + i);
+                    if (i < data.stage) {
+                        d.className = 'stage-dot done'; p.textContent = '100%';
+                    } else if (i === data.stage) {
+                        d.className = 'stage-dot run'; p.textContent = data.pct + '%';
+                    }
+                }
+            }
+
+            if (data.stage === 5 || data.stage === -1) {
+                running = false;
+                btn.classList.remove('running');
+                btn.textContent = data.stage === 5 ? 'Hoàn thành!' : 'Lỗi! Thử lại';
+
+                if (data.stage === 5) {
+                    // Update thanh tiến trình lên 100% cho đẹp mắt
+                    document.getElementById('big-bar').style.width = '100%';
+                    document.getElementById('prog-pct').textContent = '100%';
+                    document.getElementById('prog-step-label').textContent = 'Hoàn tất toàn bộ!';
+
+                    for (let i = 0; i < 5; i++) {
+                        document.getElementById('d' + i).className = 'stage-dot done';
+                        document.getElementById('p' + i).textContent = '100%';
+                    }
+                }
+                ws.close();
+            }
+        };
+
+        // 4. NẾU PYTHON CHƯA BẬT (HOẶC LỖI)
+        ws.onerror = function (err) {
+            addLog('err', 'Không thể kết nối! Bạn đã chạy lệnh "uv run api_server.py" chưa?');
+            running = false;
+            btn.classList.remove('running');
+            btn.textContent = 'Bắt đầu xử lý';
+        };
+    }
+</script>

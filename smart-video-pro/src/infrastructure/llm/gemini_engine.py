@@ -1,10 +1,10 @@
-import google.generativeai as genai
+from google import genai
 import threading
 import itertools
 import time
 from langdetect import detect
 import langcodes
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.genai.types import HarmCategory, HarmBlockThreshold
 
 class GeminiEngine:
     def __init__(self, api_keys: list[str], model_name: str):
