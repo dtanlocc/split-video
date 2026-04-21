@@ -1,0 +1,24 @@
+# --- Chặn toàn bộ các file rác Python ở mọi nơi ---
+__pycache__/
+*.py[cod]
+.venv/
+
+# --- Chặn file video và phụ đề ở mọi nơi (kể cả trong smart-video-pro) ---
+*.mp4
+*.srt
+*.avi
+*.wav
+backuppp/
+.pytest_cache/
+*.pyc
+
+# --- Chặn thư mục kết quả cụ thể bên trong smart-video-pro ---
+# Lưu ý: Viết đường dẫn từ gốc auto-clip đi vào
+smart-video-pro/verify_results/
+smart-video-pro/tests/temp_outputs/
+
+# --- Chặn các thư mục data khác ở gốc ---
+inputs/
+outputs/
+video/
+backup/
