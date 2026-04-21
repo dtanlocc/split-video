@@ -1,1 +1,0 @@
-for %a in (*.mp4) do "C:\ffmpeg\ffmpeg.exe" -i "%a" -vn -ac 1 -ar 16000 -acodec pcm_s16le "%~na.wav"

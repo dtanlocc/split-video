@@ -1,1 +1,0 @@
-"""B4: GPU-accelerated object detection."""

@@ -1,1 +1,0 @@
-"""Entry point to start the Desktop Application."""
