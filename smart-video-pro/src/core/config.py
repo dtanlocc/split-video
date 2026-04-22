@@ -20,4 +20,5 @@ class AppConfig(BaseModel):
     max_words_per_line: int = 3
     sub_margin_v: int = 250
     sub_font_size: int = 85
+    max_parallel: int = 1
     font_title_file: str = "C:/Windows/Fonts/arialbd.ttf"

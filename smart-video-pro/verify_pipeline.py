@@ -55,7 +55,7 @@ from src.infrastructure.video.renderer_impl import VideoRendererImpl
 from src.domain.schemas import CropConfig, RenderConfig
 
 # ====================== CẤU HÌNH TEST ======================
-VIDEO_PATH = "tests/test_assets/sample.mp4"
+VIDEO_PATH = "Let's talk about Tommy Tuberville trashing team GOP.... [nUW6rVmcWtY].mp4"
 API_KEYS = [
     # "AIzaSyCuXdWPGhEPEXWJ9NaBasA_6Y9Yl49AJQQ",
     # "AIzaSyAuUIN9JgFpD6q7AVkbO_sKeFjFBKlk0_w"
@@ -107,7 +107,7 @@ def verify_step_0():
     else:
         print("❌ Lỗi FFmpeg:", result.stderr)
 
-    input("Nhấn Enter để tiếp tục Step 1...")
+    # input("Nhấn Enter để tiếp tục Step 1...")
 
 
 def verify_step_1():
@@ -143,7 +143,7 @@ def verify_step_2():
     srt_path = OUTPUT_DIR / "test_output.srt"
     print(f"🧠 Đang gửi kịch bản qua Gemini để tìm Highlight...")
 
-    orchestrator.process_video(srt_path, OUTPUT_DIR)
+    orchestrator.process_video(srt_path, OUTPUT_DIR, min_sec=60, max_sec=180)
 
     json_path = OUTPUT_DIR / f"highlights_{srt_path.stem}.json"
     if json_path.exists():
@@ -181,7 +181,7 @@ def verify_step_4():
     service = YOLOService(cropper)
 
     # 1. Định nghĩa thư mục nguồn và thư mục đích
-    input_dir = Path("verify_results/outputs/sample")
+    input_dir = Path("verify_results/outputs/Let's talk about Tommy Tuberville trashing team GOP.... [nUW6rVmcWtY]")
     output_dir = Path("verify_results/yolo_outputs")
     output_dir.mkdir(parents=True, exist_ok=True) # Tạo folder output nếu chưa có
 
@@ -237,14 +237,14 @@ if __name__ == "__main__":
     print("=" * 70)
 
     try:
-        # check_gpu_status()        # Bỏ comment nếu cần kiểm tra GPU
+        check_gpu_status()        # Bỏ comment nếu cần kiểm tra GPU
 
         verify_step_0()
-        # verify_step_1()
-        # verify_step_2()
-        # verify_step_3()             # Hiện đang active
-        # verify_step_4()
-        # verify_step_final()
+        verify_step_1()
+        verify_step_2()
+        verify_step_3()             # Hiện đang active
+        verify_step_4()
+        verify_step_final()
 
     except Exception as e:
         print(f"\n❌ LỖI KHÔNG MONG MUỐN: {e}")

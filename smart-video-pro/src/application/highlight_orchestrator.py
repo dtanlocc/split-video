@@ -13,7 +13,7 @@ class HighlightOrchestrator:
         match = re.search(r"\[.*\]", text, re.DOTALL)
         return json.loads(match.group(0)) if match else None
 
-    def process_video(self, srt_path: Path, output_dir: Path):
+    def process_video(self, srt_path: Path, output_dir: Path, min_sec: int, max_sec: int):
         video_name = srt_path.stem.replace(".English", "")
         out_path = output_dir / f"highlights_{video_name}.json"
 
@@ -31,7 +31,7 @@ class HighlightOrchestrator:
         processed_ranges = {(d["start"], d["end"]) for d in existing_data}
 
         print(f"🧠 Gửi prompt tìm Highlight cho {video_name}...")
-        response = self.engine.safe_generate(self.engine.build_highlight_prompt(subtitle_text))
+        response = self.engine.safe_generate(self.engine.build_highlight_prompt(subtitle_text, min_sec, max_sec))
         
         if not response or not response.text:
             print("❌ Gemini không trả về kết quả. Bỏ qua video này.")

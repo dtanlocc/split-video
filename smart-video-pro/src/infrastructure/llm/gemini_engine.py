@@ -1,10 +1,10 @@
 from google import genai
+from google.genai import types  # Import thêm types cho cấu hình mới
 import threading
 import itertools
 import time
 from langdetect import detect
 import langcodes
-from google.genai.types import HarmCategory, HarmBlockThreshold
 
 class GeminiEngine:
     def __init__(self, api_keys: list[str], model_name: str):
@@ -12,25 +12,38 @@ class GeminiEngine:
         self.api_lock = threading.Lock()
         self.model_name = model_name
         self.part_counter = itertools.count(1)
+        self.client = None
         self._configure_model()
 
     def _configure_model(self):
+        """Cấu hình Client theo chuẩn mới của Google GenAI SDK"""
         with self.api_lock:
             if not self.active_keys:
                 raise RuntimeError("❌ Hết tất cả API Key.")
-            self.current_key = self.active_keys[0]
-            genai.configure(api_key=self.current_key)
             
-            safety_settings = {
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-            }
-            self.model = genai.GenerativeModel(
-                model_name=self.model_name, 
-                safety_settings=safety_settings
-            )
+            self.current_key = self.active_keys[0]
+            # Chuẩn mới: Khởi tạo qua Client object
+            self.client = genai.Client(api_key=self.current_key)
+            
+            # Thiết lập an toàn (Safety Settings) theo chuẩn mới
+            self.safety_settings = [
+                types.SafetySetting(
+                    category="HARM_CATEGORY_HARASSMENT",
+                    threshold="BLOCK_NONE"
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_HATE_SPEECH",
+                    threshold="BLOCK_NONE"
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    threshold="BLOCK_NONE"
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                    threshold="BLOCK_NONE"
+                ),
+            ]
             print(f"🔑 Đang dùng key: {self.current_key[:12]}...")
 
     def rotate_key(self):
@@ -45,7 +58,13 @@ class GeminiEngine:
         """Phiên bản an toàn + debug"""
         for attempt in range(max_retries):
             try:
-                response = self.model.generate_content(prompt)
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        safety_settings=self.safety_settings
+                    )
+                )
                 if response and response.text:
                     print(f"✅ Gemini thành công (attempt {attempt+1})")
                     return response
@@ -65,12 +84,13 @@ class GeminiEngine:
         print("❌ safe_generate() thất bại hoàn toàn sau nhiều lần thử!")
         return None
 
-    def build_highlight_prompt(self, subtitle_text: str):
+    def build_highlight_prompt(self, subtitle_text: str, min_sec: int, max_sec: int):
         return (
             "Below is the transcript of a video.\n"
             "Analyze the content and identify segments that are emotionally intense, action-packed, thought-provoking, or otherwise compelling highlights.\n"
             "Each selected segment must have complete meaning — do not cut off in the middle of a sentence.\n"
-            "Only include segments that are **at least 60 seconds** and **at most 180 seconds** long.\n"
+            f"Only include segments that are **at least {min_sec} seconds** "
+            f"and **at most {max_sec} seconds** long.\n"
             "Return the result as a JSON list in this exact format:\n"
             '[{\"start\": \"00:00:15,000\", \"end\": \"00:01:45,000\"}, ...]\n\n'
             "Return **ONLY** the JSON, no explanation, no markdown.\n\n"

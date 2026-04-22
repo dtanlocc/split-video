@@ -90,9 +90,12 @@ def _dominant_color(frame):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class YOLOImpl(IYOLOCropper):
-    OUT_W, OUT_H = 1080, 1920
-    TITLE_RATIO, FACE_POS = 0.19, 0.40  # 40% headroom chuẩn
-    YOLO_H = 384
+    # OUT_W, OUT_H = 1080, 1920
+    TITLE_RATIO, FACE_POS = 0.59, 0.40  # 40% headroom chuẩn
+    # YOLO_H = 384
+    
+    
+    YOLO_H = 884
     HOLD_FRAMES = 45   # 1.5s Hold máy
     DRIFT_SPEED = 0.02 # Tốc độ lia máy mượt (0.01 - 0.05)
 
@@ -109,6 +112,7 @@ class YOLOImpl(IYOLOCropper):
     def process_video(self, video_path: Path, output_dir: Path, config: CropConfig = None):
         self._load_model()
         cap = cv2.VideoCapture(str(video_path))
+        self.OUT_W, self.OUT_H  = config.output_size if config else (1080, 1920)
         fps, total = cap.get(cv2.CAP_PROP_FPS) or 30.0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         orig_w, orig_h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
@@ -192,11 +196,14 @@ class YOLOImpl(IYOLOCropper):
                         lx, ly = tx, ty
                 
                 sx, sy = kalman.update(tx, ty)
-                cx = int(np.clip(sx - content_w/2, 0, orig_w - content_w))
-                cy = int(np.clip(sy - content_h*self.FACE_POS, 0, orig_h - content_h))
-                
-                # Render
-                crop = np.ascontiguousarray(frame[cy:cy+content_h, cx:cx+content_w])
+                crop_h = min(content_h, orig_h)   # không crop quá chiều cao gốc
+                crop_w = int(crop_h * self.OUT_W / content_h)
+                crop_w = min(crop_w, orig_w)
+
+                cx = int(np.clip(sx - crop_w/2,            0, max(0, orig_w - crop_w)))
+                cy = int(np.clip(sy - crop_h*self.FACE_POS, 0, max(0, orig_h - crop_h)))
+
+                crop = np.ascontiguousarray(frame[cy:cy+crop_h, cx:cx+crop_w])
                 v_crop = cv2.resize(crop, (self.OUT_W, content_h), interpolation=cv2.INTER_LINEAR)
                 
                 if fid % int(fps*3) == 0: dom = _dominant_color(frame)
@@ -212,23 +219,33 @@ class YOLOImpl(IYOLOCropper):
         for t in threads: t.start()
 
         # FFmpeg
-        out_path = output_dir / f"{video_path.stem}_916.mp4"
-        cmd = ["ffmpeg", "-y", "-f", "rawvideo", "-vcodec", "rawvideo", "-s", "1080x1920", "-pix_fmt", "bgr24", 
-               "-r", str(fps), "-i", "-", "-i", str(video_path), "-map", "0:v:0", "-map", "1:a:0?", 
-               "-c:v", "h264_nvenc", "-preset", "p2", "-rc", "vbr", "-cq", "24", "-pix_fmt", "yuv420p", "-c:a", "aac", str(out_path)]
+        out_path = output_dir / f"{video_path.stem}.mp4"
+        out_w, out_h = self.OUT_W, self.OUT_H
+        cmd = [
+            "ffmpeg", "-y", "-f", "rawvideo", "-vcodec", "rawvideo",
+            "-s", f"{out_w}x{out_h}", "-pix_fmt", "bgr24",
+            "-r", str(fps), "-i", "-", "-i", str(video_path),
+            "-map", "0:v:0", "-map", "1:a:0?",
+            "-c:v", "h264_nvenc", "-preset", "p2", "-rc", "vbr", "-cq", "24",
+            "-pix_fmt", "yuv420p", "-c:a", "aac", str(out_path)
+        ]
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
         
-        for _ in tqdm(range(total), desc=f"🎬 {video_path.name}"):
+        for _ in range(total):
             data = write_q.get()
             if data is _STOP: break
             proc.stdin.write(data)
 
         proc.stdin.close(); proc.wait(); cap.release()
-        self.release_resources()
+        # self.release_resources()
 
     def release_resources(self):
-        if self.model: del self.model; self.model = None
-        torch.cuda.empty_cache(); gc.collect()
+        if self.model:
+            del self.model
+            self.model = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
 
     @staticmethod
     def horizontal_flip(frame): return np.fliplr(frame)

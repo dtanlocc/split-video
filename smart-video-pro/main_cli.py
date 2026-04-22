@@ -1,60 +1,58 @@
-# tool-autoclip/smart-video-pro/main_cli.py
 import sys
 import json
-import time
+import asyncio
 import argparse
+from pydantic import ValidationError
 
-# Giả lập import Pipeline Service của bạn (Comment lại khi ghép code thật)
-# from src.application.pipeline_service import run_full_pipeline
+from src.domain.schemas import RunPipelineRequest
+from src.application.pipeline_manager import PipelineManager
+from src.security.token_guard import verify_session_token
 
-def emit_progress(stage: int, pct: int, status: str, msg: str):
-    """Hàm in tiến độ ra stdout để Rust đọc được"""
-    # Trả về format JSON y hệt cấu trúc bạn thiết kế ở giao diện HTML
-    data = {
-        "stage": stage,
-        "pct": pct,
-        "status": status,
-        "msg": msg
-    }
-    # flush=True cực kỳ quan trọng để đẩy data thẳng ra ống dẫn (Pipe) cho Rust
-    print(json.dumps(data), flush=True) 
-
-def main():
-    parser = argparse.ArgumentParser(description="AutoClip AI Core")
-    parser.add_argument("--mode", type=str, default="full", help="Pipeline mode")
-    parser.add_argument("--whisper", type=str, default="medium", help="Whisper model")
+async def main():
+    parser = argparse.ArgumentParser(description="AutoClip AI Core Engine")
+    parser.add_argument("--payload", type=str, required=True)
     args = parser.parse_args()
 
-    # Bắt đầu báo hiệu cho UI
-    emit_progress(0, 0, "inf", "Khởi động Động cơ AI...")
-    time.sleep(1) # Giả lập delay khởi động
-
+    # 1. PARSE PAYLOAD
     try:
-        # Ở ĐÂY LÀ NƠI GỌI PIPELINE THẬT CỦA BẠN
-        # Ví dụ: run_full_pipeline(mode=args.mode, whisper=args.whisper, progress_callback=emit_progress)
-        
-        # --- ĐOẠN NÀY LÀ GIẢ LẬP ĐỂ TEST UI TRƯỚC KHI GẮN AI NẶNG VÀO ---
-        emit_progress(0, 15, "inf", "Đang Transcribe (Whisper)...")
-        time.sleep(2)
-        
-        emit_progress(1, 35, "inf", "Đang phân tích Highlight (Gemini)...")
-        time.sleep(2)
-        
-        emit_progress(2, 55, "inf", "Đang cắt Video (FFmpeg)...")
-        time.sleep(2)
-        
-        emit_progress(3, 80, "inf", "Đang Smart Crop (YOLO)...")
-        time.sleep(3)
-        
-        emit_progress(4, 95, "inf", "Đang Render Subtitle & Export...")
-        time.sleep(2)
-        
-        emit_progress(5, 100, "ok", "Hoàn tất toàn bộ pipeline!")
-        # ----------------------------------------------------------------
-
+        parsed = json.loads(args.payload)
     except Exception as e:
-        emit_progress(-1, 0, "err", f"Lỗi nghiêm trọng: {str(e)}")
+        print(json.dumps({"stage": -1, "pct": 0, "status": "err", "msg": f"Payload JSON không hợp lệ: {e}"}), flush=True)
         sys.exit(1)
 
+    # 2. SECURITY GATE: Verify session token
+    session_token = parsed.get("session_token", "")
+    hwid          = parsed.get("hwid", "")
+
+    is_valid, err_msg = verify_session_token(session_token, hwid)
+    if not is_valid:
+        print(json.dumps({"stage": -1, "pct": 0, "status": "err", "msg": f"❌ Xác thực thất bại: {err_msg}"}), flush=True)
+        sys.exit(1)
+
+    print(json.dumps({"stage": 0, "pct": 3, "status": "inf", "msg": "✅ License hợp lệ, bắt đầu xử lý..."}), flush=True)
+
+    # 3. VALIDATE SCHEMA
+    try:
+        # Pydantic sẽ tự động kiểm tra, lúc nãy nó cần String mà mình lại ép thành List nên nó báo lỗi
+        request_data = RunPipelineRequest.model_validate(parsed)
+    except ValidationError as e:
+        error_msgs = [" -> ".join([str(loc) for loc in err["loc"]]) + f": {err['msg']}" for err in e.errors()]
+        print(json.dumps({"stage": -1, "pct": 0, "status": "err", "msg": f"Sai định dạng Config: {' | '.join(error_msgs)}"}), flush=True)
+        sys.exit(1)
+
+    # 4. CHẠY PIPELINE
+    manager     = PipelineManager(output_base_dir="./workspace")
+    worker_task = asyncio.create_task(manager.start_worker())
+
+    await manager.add_task(request_data)
+    await manager.queue.join()      # Chờ xử lý xong
+
+    manager.is_running = False
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
+
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

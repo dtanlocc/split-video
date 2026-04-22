@@ -1,4 +1,3 @@
-# src/application/yolo_service.py
 from pathlib import Path
 from src.domain.interfaces import IYOLOCropper
 from src.domain.schemas import CropConfig
@@ -14,6 +13,8 @@ class YOLOService:
         if config is None:
             config = CropConfig()
             
-        print(f"🎯 B4: Bắt đầu YOLO Smart Crop → {video_path.name}")
+        # print đã được tắt để tránh rác Terminal UI, chỉ gửi tín hiệu ngầm
         self.cropper.process_video(video_path, output_dir, config)
-        self.cropper.release_resources()
+        
+        # ĐÃ BỎ DÒNG NÀY: Không xoá YOLO model ở đây. Ta giữ nó trên VRAM để xử lý video tiếp theo cho lẹ.
+        # Xoá ở file pipeline_manager.py lúc đã chạy xong toàn bộ list.

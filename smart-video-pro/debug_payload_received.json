@@ -1,0 +1,35 @@
+{
+    "crop_config": {
+        "output_size": [
+            1080,
+            1920
+        ],
+        "sharpen_strength": "high"
+    },
+    "gemini_api_key": "àasdfasfd",
+    "gemini_config": {
+        "max_duration_sec": 300,
+        "min_duration_sec": 150,
+        "model_name": "gemini-2.5-flash"
+    },
+    "hwid": "A44F2B6B3BE81DC51F1509C04D30FE85",
+    "mode": "full",
+    "render_config": {
+        "font_title_file": "C:/Windows/Fonts/arialbd.ttf",
+        "max_parallel": 1,
+        "max_words_per_line": 3,
+        "sub_bg_color": "255, 0, 0, 160",
+        "sub_font_size": 85,
+        "sub_margin_v": 250,
+        "title_color": "#FFD700",
+        "video_speed": 1.03
+    },
+    "session_token": "c9b888248142a4f8da66da52c3afb09a58a9995ea29d0b5066ccfabd6aa67887",
+    "stt_config": {
+        "compute_type": "float16",
+        "device": "cuda",
+        "lang": "en",
+        "model": "small"
+    },
+    "video_path": "C:\\TOOL-AUTOCLIP\\smart-video-pro\\Let's talk about Tommy Tuberville trashing team GOP.... [nUW6rVmcWtY].mp4"
+}

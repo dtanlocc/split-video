@@ -16,20 +16,17 @@ class WhisperTranscriber:
     Được chỉnh sửa để giống nhất logic SpeechToTextCLI (CPU + int8 mode)
     """
 
-    def __init__(self, model_size: str = "large-v2"):
-        # === CẤU HÌNH GIỐNG HỆT CODE GỐC ===
+    def __init__(self, model_size: str = "medium", device: str = "cuda", compute_type: str = "int8"):
         self.model_size = model_size
-        self.device = "cuda"                    # Ép CPU như code bạn đưa
-        self.compute_type = "int8"             # int8 cho CPU nhanh + tiết kiệm RAM
-        self.nb_threads = 4                    # Số luồng CPU (có thể tăng lên 8 hoặc 12)
-
+        self.device = device                     # ← LẤY TỪ CONFIG
+        self.compute_type = compute_type         # ← LẤY TỪ CONFIG
+        self.nb_threads = 8 if device == "cpu" else 4
         self.model = None
-
         self._load_model()
 
     def _load_model(self):
         """Giống hệt phần __init__ của SpeechToTextCLI"""
-        print(f"--- INITIALIZING WHISPER ---")
+        print(f"--- INITIALIZING WHISPER ---", flush=True)
         print(f"Model: {self.model_size}")
         print(f"Device: {self.device} ({self.compute_type}) with {self.nb_threads} Threads")
         
@@ -111,11 +108,16 @@ class WhisperTranscriber:
         return results
 
     def release_resources(self):
-        """Giải phóng tài nguyên sau khi dùng"""
-        if self.model:
-            del self.model
-            self.model = None
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
-        print("🧹 Đã release Whisper resources.")
+        """Giải phóng tài nguyên an toàn để tránh treo Thread"""
+        try:
+            if self.model:
+                # Không dùng 'del', chỉ cần gán None để giảm reference count
+                self.model = None 
+            
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            # TUYỆT ĐỐI KHÔNG gọi gc.collect() ở đây
+            print("🧹 Đã giải phóng Whisper (VRAM cleaned).", flush=True)
+        except Exception as e:
+            print(f"⚠️ Cảnh báo dọn dẹp: {e}", flush=True)
