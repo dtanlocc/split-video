@@ -1,0 +1,6 @@
+{
+  "timestamp": 1776928069.5927458,
+  "video": "C:\\test\\City chief confronts county sheriff in a fiery clash over jurisdiction and notification..mp4",
+  "error": "\"CropConfig\" object has no field \"ffmpeg_codec\"",
+  "traceback": "Traceback (most recent call last):\n  File \"C:\\TOOL-AUTOCLIP\\smart-video-pro\\src\\application\\pipeline_manager.py\", line 163, in run_pipeline_isolated\n    setattr(req.crop_config, 'ffmpeg_codec', hw.config[\"ffmpeg_codec\"])\n  File \"C:\\TOOL-AUTOCLIP\\smart-video-pro\\.venv\\Lib\\site-packages\\pydantic\\main.py\", line 1048, in __setattr__\n    elif (setattr_handler := self._setattr_handler(name, value)) is not None:\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\TOOL-AUTOCLIP\\smart-video-pro\\.venv\\Lib\\site-packages\\pydantic\\main.py\", line 1095, in _setattr_handler\n    raise ValueError(f'\"{cls.__name__}\" object has no field \"{name}\"')\nValueError: \"CropConfig\" object has no field \"ffmpeg_codec\"\n"
+}

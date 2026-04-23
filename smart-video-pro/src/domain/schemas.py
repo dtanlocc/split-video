@@ -39,6 +39,15 @@ class CropConfig(BaseModel):
     output_size:      Tuple[int, int] = (1080, 1920)
     sharpen_strength: str             = "medium"
     enhance:          bool            = True
+    crop_mode: Literal["square_1:1", "fill_9:16"] = "square_1:1"
+    
+        # 🔥 Thêm field mới cho FFmpeg adaptive config
+    ffmpeg_codec: str = "h264_nvenc"  # "h264_nvenc" hoặc "libx264"
+    ffmpeg_preset: str = "p4"         # "fast", "p2", "p4", "p6", "p7"
+    
+    # Optional fields cho tương lai
+    yolo_model: Optional[str] = None  # Override model path nếu cần
+    batch_size: Optional[int] = None  # Override batch size nếu cần
 
 
 class RenderConfig(BaseModel):

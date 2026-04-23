@@ -20,7 +20,7 @@ class WhisperTranscriber:
         self.model_size = model_size
         self.device = device                     # ← LẤY TỪ CONFIG
         self.compute_type = compute_type         # ← LẤY TỪ CONFIG
-        self.nb_threads = 8 if device == "cpu" else 4
+        self.nb_threads = 8 if device == "cpu" else 1
         self.model = None
         self._load_model()
 
