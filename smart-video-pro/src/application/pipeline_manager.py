@@ -1,5 +1,5 @@
-# main_cli.py
-# 🔥 FIX 1: Tắt buffering Python ngay từ đầu
+# smart-video-pro/src/application/pipeline_manager.py
+# 🔥 FIX: Tắt buffering Python ngay từ đầu
 import os
 import sys
 os.environ["PYTHONUNBUFFERED"] = "1"
@@ -20,7 +20,7 @@ import psutil
 import concurrent.futures
 
 # Import schemas
-from src.domain.schemas import RunPipelineRequest
+from src.domain.schemas import RunPipelineRequest, ProgressEvent
 
 # Import Services
 from src.infrastructure.ai.whisper_impl import WhisperTranscriber
@@ -34,7 +34,7 @@ from src.application.render_service import RenderService
 from src.infrastructure.video.renderer_impl import VideoRendererImpl
 from src.infrastructure.utils.hardware_profiler import detect_hardware
 from src.security.token_guard import verify_session_token
-
+from src.application.error_mapper import ErrorMessageMapper
 
 # =====================================================================
 # HÀM XỬ LÝ ĐỘC LẬP
@@ -43,14 +43,13 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
     """Pipeline xử lý video với Hardware-Aware Configuration"""
     output_base = Path(output_base_str)
     
-    # 🔥 FIX 2: Hàm emit chuẩn cho Tauri
-    def emit(stage: int, pct: int, status: str, msg: str):
-        log_obj = {"stage": stage, "pct": pct, "status": status, "msg": msg}
-        log_line = json.dumps(log_obj, ensure_ascii=False)
-        sys.stdout.write(log_line + "\n")
+    # 🔥 FIX: Hàm emit chuẩn với stage là STRING
+    def emit(stage: str, pct: int, status: str, msg: str, meta: dict = None):
+        event = ProgressEvent(stage=stage, pct=pct, status=status, msg=msg, meta=meta)
+        sys.stdout.write(event.to_json() + "\n")
         sys.stdout.flush()
         if status == "err":
-            sys.stderr.write(f"[PYTHON_ERR] {log_line}\n")
+            sys.stderr.write(f"[ERR] {event.to_json()}\n")
             sys.stderr.flush()
 
     # Setup OS Priority
@@ -79,11 +78,12 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
     work_dir = output_base / video_name
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    emit(0, 5, "inf", f"Bắt đầu xử lý: {video_name}")
+    # 🔥 FIX: Dùng string cho stage
+    emit("init", 5, "inf", f"Bắt đầu xử lý: {video_name}")
 
     try:
         # BƯỚC 0: TÁCH AUDIO
-        emit(0, 10, "inf", "Đang trích xuất Audio...")
+        emit("audio", 10, "inf", "Đang trích xuất Audio...")
         wav_path = work_dir / f"{video_name}.wav"
         subprocess.run([
             "ffmpeg", "-y", "-i", str(video_path),
@@ -92,7 +92,7 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
         ], capture_output=True, check=True)
 
         # BƯỚC 1: STT (WHISPER)
-        emit(1, 20, "inf", f"Đang nhận diện giọng nói (Model - {req.stt_config.model})...")
+        emit("stt", 20, "inf", f"Đang nhận diện giọng nói (Model - {req.stt_config.model})...")
         out_srt = work_dir / f"{video_name}.srt"
         
         transcriber = WhisperTranscriber(
@@ -116,27 +116,26 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
 
         # BƯỚC 2: GEMINI HIGHLIGHT
         highlight_json = work_dir / f"highlights_{video_name}.json"
-        emit(2, 40, "inf", "Đang phân tích kịch bản bằng AI...")
+        emit("ai", 40, "inf", "Đang phân tích kịch bản bằng AI...")
         
         if not highlight_json.exists():
             raise Exception("AI không tạo ra được kịch bản Highlight nào!")
 
         # BƯỚC 3: CẮT VIDEO (FFMPEG)
-        emit(3, 60, "inf", "Đang chia nhỏ video theo kịch bản AI...")
+        emit("cut", 60, "inf", "Đang chia nhỏ video theo kịch bản AI...")
         cut_output_dir = work_dir / "cuts"
         cut_output_dir.mkdir(exist_ok=True)
         FFmpegHandler().cut_highlights(video_path, highlight_json, cut_output_dir)
 
         # BƯỚC 4: YOLO SMART CROP (ADAPTIVE MODE)
         if req.mode == "full":
-            emit(4, 75, "inf", "🔍 Đang quét phần cứng để tối ưu YOLO...")
+            emit("crop", 75, "inf", "🔍 Đang quét phần cứng để tối ưu YOLO...")
             
             hw = detect_hardware()
             req.crop_config.ffmpeg_codec = hw.config["ffmpeg_codec"]
             req.crop_config.ffmpeg_preset = hw.config["ffmpeg_preset"]
             
-            # 🔥 Log hardware qua emit để hiện lên GUI
-            emit(4, 75, "inf", f"🖥️ {hw.gpu_name} | VRAM: {hw.vram_gb}GB | RAM: {hw.ram_gb}GB")
+            emit("crop", 75, "inf", f"🖥️ {hw.gpu_name} | VRAM: {hw.vram_gb}GB | RAM: {hw.ram_gb}GB")
             
             yolo_output_dir = work_dir / "yolo_crops"
             yolo_output_dir.mkdir(exist_ok=True)
@@ -148,7 +147,7 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             if not cut_files:
                 raise Exception("Không tìm thấy video nào cắt ra từ FFmpeg!")
 
-            emit(4, 76, "inf", f"✅ Tìm thấy {len(cut_files)} cảnh. Bắt đầu Virtual Cameraman...")
+            emit("crop", 76, "inf", f"✅ Tìm thấy {len(cut_files)} cảnh. Bắt đầu Virtual Cameraman...")
 
             cropper = YOLOImpl(
                 model_path=hw.config["yolo_model"],
@@ -160,7 +159,7 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             )
 
             for i, cut_file in enumerate(cut_files, 1):
-                emit(4, 77 + i*2, "inf", f"Processing clip {i}/{len(cut_files)}: {cut_file.name}")
+                emit("crop", 77 + i*2, "inf", f"Processing clip {i}/{len(cut_files)}: {cut_file.name}")
                 cropper.process_video(cut_file, yolo_output_dir, config=req.crop_config)
 
             cropper.release_resources()
@@ -168,10 +167,10 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             gc.collect()
             if torch.cuda.is_available(): torch.cuda.empty_cache()
 
-            emit(4, 85, "inf", "✅ YOLO Adaptive hoàn tất!")
+            emit("crop", 85, "inf", "✅ YOLO Adaptive hoàn tất!")
             
         else:
-            emit(4, 75, "inf", "Đang crop 1:1 và đóng gói 9:16...")
+            emit("crop", 75, "inf", "Đang crop 1:1 và đóng gói 9:16...")
             yolo_output_dir = work_dir / "simple_crops"
             yolo_output_dir.mkdir(exist_ok=True)
 
@@ -202,22 +201,31 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
                     "-c:a", "aac", "-b:a", "192k", str(out_path)
                 ]
                 subprocess.run(cmd, capture_output=True, check=True)
-                emit(4, 80, "inf", f"Đã xử lý: {cut_file.name}")
+                emit("crop", 80, "inf", f"Đã xử lý: {cut_file.name}")
 
-            emit(4, 85, "inf", "Simple Crop hoàn tất!")
+            emit("crop", 85, "inf", "Simple Crop hoàn tất!")
 
         # BƯỚC 5: FINAL RENDER
-        emit(5, 90, "inf", "Đang render phụ đề và chèn hiệu ứng...")
+        emit("render", 90, "inf", "Đang render phụ đề và chèn hiệu ứng...")
         final_dir = work_dir / "final"
         final_dir.mkdir(exist_ok=True)
         renderer = VideoRendererImpl()
         render_service = RenderService(renderer)
         render_service.render_all(yolo_output_dir, final_dir, config=req.render_config)
 
-        emit(6, 100, "ok", f"Hoàn tất xử lý video: {video_name}!")
+        emit("complete", 100, "ok", f"Hoàn tất xử lý video: {video_name}!")
         return "SUCCESS"
 
     except Exception as e:
+        mapped = ErrorMessageMapper.map(e)
+        
+        # Emit error chuẩn cho frontend
+        emit("complete", 0, "err", mapped["user_msg"], meta={
+            "suggestion": mapped["suggestion"],
+            "retry_possible": mapped["retry_possible"],
+            "technical": mapped["technical"]
+        })
+        
         import time
         dump = {
             "timestamp": time.time(),
@@ -234,11 +242,14 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             sys.stderr.flush()
         except: pass
         
-        emit(-1, 0, "err", f"❌ Pipeline failed: {str(e)}")
+        emit("complete", 0, "err", f"❌ Pipeline failed: {str(e)}")
         raise e
     finally:
         gc.collect()
-        if torch.cuda.is_available(): torch.cuda.empty_cache()
+        if torch.cuda.is_available(): 
+            torch.cuda.empty_cache()
+        from src.infrastructure.ai.whisper_cache import WhisperModelCache
+        WhisperModelCache.clear_all()
 
 
 # =====================================================================
@@ -251,7 +262,8 @@ class PipelineManager:
         self.output_base.mkdir(parents=True, exist_ok=True)
         self.is_running = False
 
-    def emit(self, stage: int, pct: int, status: str, msg: str):
+    def emit(self, stage: str, pct: int, status: str, msg: str):
+        # 🔥 FIX: stage là string, không phải int
         log_obj = {"stage": stage, "pct": pct, "status": status, "msg": msg}
         sys.stdout.write(json.dumps(log_obj, ensure_ascii=False) + "\n")
         sys.stdout.flush()
@@ -266,12 +278,10 @@ class PipelineManager:
                 try:
                     await loop.run_in_executor(pool, run_pipeline_isolated, req, str(self.output_base))
                 except Exception as e:
-                    self.emit(-1, 0, "err", f"❌ Lỗi pipeline: {str(e)}")
+                    self.emit("complete", 0, "err", f"❌ Lỗi pipeline: {str(e)}")
                 finally:
                     self.queue.task_done()
 
     async def add_task(self, req: RunPipelineRequest):
         await self.queue.put(req)
-        self.emit(0, 0, "inf", f"Đã thêm vào hàng đợi: {Path(req.video_path).name}")
-
-
+        self.emit("init", 0, "inf", f"Đã thêm vào hàng đợi: {Path(req.video_path).name}")

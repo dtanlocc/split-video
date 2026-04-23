@@ -6,7 +6,7 @@ import torch
 from pathlib import Path
 from typing import List
 from faster_whisper import WhisperModel
-
+from .whisper_cache import WhisperModelCache
 from src.domain.entities import SubtitleSegment
 
 
@@ -22,7 +22,8 @@ class WhisperTranscriber:
         self.compute_type = compute_type         # ← LẤY TỪ CONFIG
         self.nb_threads = 8 if device == "cpu" else 1
         self.model = None
-        self._load_model()
+        # self._load_model()
+        self.model = WhisperModelCache().get_model(model_size, device, compute_type)
 
     def _load_model(self):
         """Giống hệt phần __init__ của SpeechToTextCLI"""
@@ -106,18 +107,23 @@ class WhisperTranscriber:
             print(f"❌ Lỗi nghiêm trọng khi transcribe {Path(audio_path).name}: {e}")
 
         return results
-
+    
     def release_resources(self):
-        """Giải phóng tài nguyên an toàn để tránh treo Thread"""
-        try:
-            if self.model:
-                # Không dùng 'del', chỉ cần gán None để giảm reference count
-                self.model = None 
+        """Chỉ drop reference, KHÔNG xóa model khỏi cache"""
+        self.model = None  # Giảm reference count
+        # 🔥 KHÔNG gọi empty_cache() ở đây - để cache quản lý
+        print("🧹 Whisper reference dropped (model kept in cache)", flush=True)
+    # def release_resources(self):
+    #     """Giải phóng tài nguyên an toàn để tránh treo Thread"""
+    #     try:
+    #         if self.model:
+    #             # Không dùng 'del', chỉ cần gán None để giảm reference count
+    #             self.model = None 
             
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+    #         if torch.cuda.is_available():
+    #             torch.cuda.empty_cache()
             
-            # TUYỆT ĐỐI KHÔNG gọi gc.collect() ở đây
-            print("🧹 Đã giải phóng Whisper (VRAM cleaned).", flush=True)
-        except Exception as e:
-            print(f"⚠️ Cảnh báo dọn dẹp: {e}", flush=True)
+    #         # TUYỆT ĐỐI KHÔNG gọi gc.collect() ở đây
+    #         print("🧹 Đã giải phóng Whisper (VRAM cleaned).", flush=True)
+    #     except Exception as e:
+    #         print(f"⚠️ Cảnh báo dọn dẹp: {e}", flush=True)

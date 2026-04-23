@@ -94,3 +94,27 @@ class AppConfig(BaseModel):
     max_parallel:         int   = 1
     video_speed:          float = 1.03
     font_title_file:      str   = Field(default_factory=_get_default_bold_font)
+    
+# src/domain/schemas.py - Thêm class mới
+from pydantic import BaseModel, Field
+from typing import Literal, Optional
+
+class ProgressEvent(BaseModel):
+    """Schema chuẩn cho progress event → Tauri → React"""
+    stage: Literal[
+        "init",      # 0: Khởi động
+        "audio",     # 1: Tách audio
+        "stt",       # 2: Whisper transcribe
+        "ai",        # 3: Gemini highlight analysis
+        "cut",       # 4: FFmpeg cut
+        "crop",      # 5: YOLO/simple crop
+        "render",    # 6: Final render
+        "complete"   # 7: Hoàn tất
+    ]
+    pct: int = Field(ge=0, le=100)  # Progress 0-100
+    status: Literal["inf", "ok", "err", "warn"]  # Trạng thái
+    msg: str  # Message hiển thị cho user
+    meta: Optional[dict] = None  # Extra data (tên file, thời gian ước tính, v.v.)
+    
+    def to_json(self) -> str:
+        return self.model_dump_json(ensure_ascii=False)

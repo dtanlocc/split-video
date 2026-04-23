@@ -97,7 +97,7 @@ class YOLOImpl(IYOLOCropper):
     def __init__(self, model_path: str = "yolov8n.pt", device: str = "auto", 
                  batch_size: int = 4, use_half: bool = True, queue_raw: int = 48, queue_result: int = 32):
         self.model_path = model_path
-        self.batch_size = batch_size
+        self.batch_size = batch_size if batch_size is not None else self._get_optimal_batch_size()
         self.use_half = use_half
         self.queue_raw_size = queue_raw
         self.queue_result_size = queue_result
@@ -129,6 +129,31 @@ class YOLOImpl(IYOLOCropper):
                 self.model.overrides['batch'] = 1
             else:
                 raise
+    def _get_optimal_batch_size(self, reserved_mb: int = 512) -> int:
+        """Tính batch size tối ưu dựa trên VRAM available"""
+        if self.device != "cuda" or not torch.cuda.is_available():
+            return 1
+        
+        try:
+            # Lấy VRAM total và allocated
+            total_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
+            allocated_gb = torch.cuda.memory_allocated(0) / 1024**3
+            reserved_gb = torch.cuda.memory_reserved(0) / 1024**3
+            
+            # Tính VRAM free (trừ buffer an toàn)
+            free_gb = total_gb - allocated_gb - reserved_gb - (reserved_mb / 1024)
+            
+            # Map VRAM free → batch size (yolov8n ~300MB/batch ở FP16)
+            if free_gb >= 6:
+                return 8
+            elif free_gb >= 4:
+                return 4
+            elif free_gb >= 2:
+                return 2
+            else:
+                return 1
+        except:
+            return 1  # Fallback safe
 
     def process_video(self, video_path: Path, output_dir: Path, config: CropConfig = None):
         self._load_model()
@@ -160,6 +185,8 @@ class YOLOImpl(IYOLOCropper):
                     break
                 raw_q.put((fid, frame))
                 fid += 1
+                
+        
 
         def _inference():
             pending = []
