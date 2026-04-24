@@ -1,0 +1,6 @@
+{
+  "timestamp": 1776948487.3660243,
+  "video": "C:\\test\\City chief confronts county sheriff in a fiery clash over jurisdiction and notification..mp4",
+  "error": "Whisper không nhận diện được giọng nói",
+  "traceback": "Traceback (most recent call last):\n  File \"C:\\TOOL-AUTOCLIP\\smart-video-pro\\src\\application\\pipeline_manager.py\", line 110, in run_pipeline_isolated\n    raise Exception(\"Whisper không nhận diện được giọng nói\")\nException: Whisper không nhận diện được giọng nói\n"
+}

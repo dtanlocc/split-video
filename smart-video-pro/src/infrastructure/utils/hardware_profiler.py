@@ -21,45 +21,88 @@ def detect_hardware() -> HardwareProfile:
     os_name = platform.system()
     cpu_cores = os.cpu_count() or 4
     ram_gb = psutil.virtual_memory().total / (1024**3)
-    
     has_gpu = False
     gpu_name = "CPU"
     vram_gb = 0.0
-    
+
     try:
         if torch.cuda.is_available():
             has_gpu = True
-            gpu_name = torch.cuda.get_device_name(0)
-            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-    except Exception:
+            props = torch.cuda.get_device_properties(0)
+            gpu_name = props.name
+            vram_gb = props.total_memory / 1024**3
+            print(f"🎮 Detected GPU: {gpu_name} ({vram_gb:.2f}GB)", flush=True)
+    except Exception as e:
+        print(f"⚠️ GPU detection error: {e}", flush=True)
         pass  # Driver lỗi → fallback CPU an toàn
 
     is_low_end = (not has_gpu) or (vram_gb < 4.0) or (ram_gb < 8.0)
 
-    # 🎯 Bảng cấu hình thích ứng
+    # 🎯 Bảng cấu hình thích ứng (TỐI ƯU HƠN)
     if not has_gpu:
-        cfg = {"yolo_model": "yolov8n.pt", "batch_size": 1, "use_half": False, 
-               "queue_raw": 16, "queue_result": 16, "ffmpeg_codec": "libx264", "ffmpeg_preset": "fast"}
+        cfg = {
+            "yolo_model": "yolov8n.pt", 
+            "batch_size": 1, 
+            "use_half": False, 
+            "queue_raw": 16, 
+            "queue_result": 16, 
+            "ffmpeg_codec": "libx264", 
+            "ffmpeg_preset": "fast"
+        }
     elif vram_gb < 4.0:
-        cfg = {"yolo_model": "yolov8n.pt", "batch_size": 2, "use_half": False, 
-               "queue_raw": 24, "queue_result": 24, "ffmpeg_codec": "h264_nvenc", "ffmpeg_preset": "p4"}
+        cfg = {
+            "yolo_model": "yolov8n.pt", 
+            "batch_size": 2, 
+            "use_half": False, 
+            "queue_raw": 24, 
+            "queue_result": 24, 
+            "ffmpeg_codec": "h264_nvenc", 
+            "ffmpeg_preset": "p4"
+        }
     elif vram_gb < 6.0:
-        cfg = {"yolo_model": "yolov8n.pt", "batch_size": 4, "use_half": True, 
-               "queue_raw": 48, "queue_result": 32, "ffmpeg_codec": "h264_nvenc", "ffmpeg_preset": "p4"}
+        cfg = {
+            "yolo_model": "yolov8n.pt", 
+            "batch_size": 4, 
+            "use_half": True, 
+            "queue_raw": 48, 
+            "queue_result": 32, 
+            "ffmpeg_codec": "h264_nvenc", 
+            "ffmpeg_preset": "p4"
+        }
     elif vram_gb < 8.0:
-        cfg = {"yolo_model": "yolov8n.pt", "batch_size": 6, "use_half": True, 
-               "queue_raw": 64, "queue_result": 48, "ffmpeg_codec": "h264_nvenc", "ffmpeg_preset": "p5"}
+        cfg = {
+            "yolo_model": "yolov8n.pt", 
+            "batch_size": 6, 
+            "use_half": True, 
+            "queue_raw": 64, 
+            "queue_result": 48, 
+            "ffmpeg_codec": "h264_nvenc", 
+            "ffmpeg_preset": "p5"
+        }
     else:
-        cfg = {"yolo_model": "yolov8n.pt", "batch_size": 8, "use_half": True, 
-               "queue_raw": 128, "queue_result": 64, "ffmpeg_codec": "h264_nvenc", "ffmpeg_preset": "p6"}
+        cfg = {
+            "yolo_model": "yolov8n.pt", 
+            "batch_size": 8, 
+            "use_half": True, 
+            "queue_raw": 128, 
+            "queue_result": 64, 
+            "ffmpeg_codec": "h264_nvenc", 
+            "ffmpeg_preset": "p6"
+        }
 
-    # RAM thấp → giảm queue/batch tránh OOM hệ thống
+    # 🔥 RAM thấp → giảm queue/batch tránh OOM hệ thống
     if ram_gb < 6.0:
         cfg["queue_raw"] = max(16, cfg["queue_raw"] // 2)
         cfg["batch_size"] = max(1, cfg["batch_size"] // 2)
+        print(f"⚠️ RAM thấp ({ram_gb:.1f}GB) → Giảm batch/queue", flush=True)
 
     return HardwareProfile(
-        os_name=os_name, cpu_cores=cpu_cores, ram_gb=round(ram_gb, 1),
-        has_gpu=has_gpu, gpu_name=gpu_name, vram_gb=round(vram_gb, 1),
-        is_low_end=is_low_end, config=cfg
+        os_name=os_name, 
+        cpu_cores=cpu_cores, 
+        ram_gb=round(ram_gb, 1),
+        has_gpu=has_gpu, 
+        gpu_name=gpu_name, 
+        vram_gb=round(vram_gb, 1),
+        is_low_end=is_low_end, 
+        config=cfg
     )

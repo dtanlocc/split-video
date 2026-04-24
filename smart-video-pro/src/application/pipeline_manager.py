@@ -40,10 +40,8 @@ from src.application.error_mapper import ErrorMessageMapper
 # HÀM XỬ LÝ ĐỘC LẬP
 # =====================================================================
 def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
-    """Pipeline xử lý video với Hardware-Aware Configuration"""
     output_base = Path(output_base_str)
     
-    # 🔥 FIX: Hàm emit chuẩn với stage là STRING
     def emit(stage: str, pct: int, status: str, msg: str, meta: dict = None):
         event = ProgressEvent(stage=stage, pct=pct, status=status, msg=msg, meta=meta)
         sys.stdout.write(event.to_json() + "\n")
@@ -56,9 +54,10 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
     try:
         p = psutil.Process(os.getpid())
         p.nice(psutil.HIGH_PRIORITY_CLASS if sys.platform == "win32" else -10)
-    except: pass
+    except: 
+        pass
 
-    # Setup CUDA Bridge cho Windows
+    # 🔥 Setup CUDA Bridge cho Windows
     if sys.platform == "win32":
         torch_lib_path = os.path.join(os.path.dirname(torch.__file__), "lib")
         if os.path.exists(torch_lib_path):
@@ -73,12 +72,17 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
                 if os.path.exists(src_p) and not os.path.exists(dst_p):
                     shutil.copy(src_p, dst_p)
 
+    # 🔥 Hiển thị thông tin GPU
+    if torch.cuda.is_available():
+        props = torch.cuda.get_device_properties(0)
+        emit("init", 1, "inf", f"🎮 GPU: {props.name} | VRAM: {props.total_memory/1024**3:.1f}GB")
+        print(f"🎮 GPU: {props.name} | VRAM: {props.total_memory/1024**3:.1f}GB", flush=True)
+
     video_path = Path(req.video_path)
     video_name = video_path.stem
     work_dir = output_base / video_name
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # 🔥 FIX: Dùng string cho stage
     emit("init", 5, "inf", f"Bắt đầu xử lý: {video_name}")
 
     try:
@@ -111,15 +115,31 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
         
         transcriber.release_resources()
         del transcriber
+        
+        # 🔥 Clear GPU cache sau mỗi bước lớn
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
         gc.collect()
-        if torch.cuda.is_available(): torch.cuda.empty_cache()
 
         # BƯỚC 2: GEMINI HIGHLIGHT
-        highlight_json = work_dir / f"highlights_{video_name}.json"
+        # highlight_json = work_dir / f"highlights_{video_name}.json"
         emit("ai", 40, "inf", "Đang phân tích kịch bản bằng AI...")
         
-        if not highlight_json.exists():
-            raise Exception("AI không tạo ra được kịch bản Highlight nào!")
+        try:
+            engine = GeminiEngine(api_keys=[req.gemini_api_key], model_name=req.gemini_config.model_name)
+            orchestrator = HighlightOrchestrator(engine, SRTUtils())
+            orchestrator.process_video(
+                out_srt, 
+                work_dir, 
+                min_sec=req.gemini_config.min_duration_sec, 
+                max_sec=req.gemini_config.max_duration_sec
+            )
+            highlight_json = work_dir / f"highlights_{video_name}.json"
+            if not highlight_json.exists():
+                raise Exception("AI không tạo ra được kịch bản Highlight nào!")
+        except Exception as gemini_err:
+            raise Exception(f"Lỗi AI Gemini: {str(gemini_err)}")
 
         # BƯỚC 3: CẮT VIDEO (FFMPEG)
         emit("cut", 60, "inf", "Đang chia nhỏ video theo kịch bản AI...")
@@ -149,10 +169,13 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
 
             emit("crop", 76, "inf", f"✅ Tìm thấy {len(cut_files)} cảnh. Bắt đầu Virtual Cameraman...")
 
+            # 🔥 Tối ưu batch size dựa trên VRAM
+            optimal_batch = hw.config["batch_size"]
+            
             cropper = YOLOImpl(
                 model_path=hw.config["yolo_model"],
                 device="auto",
-                batch_size=hw.config["batch_size"],
+                batch_size=optimal_batch,
                 use_half=hw.config["use_half"],
                 queue_raw=hw.config["queue_raw"],
                 queue_result=hw.config["queue_result"]
@@ -161,11 +184,18 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             for i, cut_file in enumerate(cut_files, 1):
                 emit("crop", 77 + i*2, "inf", f"Processing clip {i}/{len(cut_files)}: {cut_file.name}")
                 cropper.process_video(cut_file, yolo_output_dir, config=req.crop_config)
+                
+                # 🔥 Clear cache sau mỗi video
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
             cropper.release_resources()
             del cropper
+            
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
             gc.collect()
-            if torch.cuda.is_available(): torch.cuda.empty_cache()
 
             emit("crop", 85, "inf", "✅ YOLO Adaptive hoàn tất!")
             
@@ -219,7 +249,6 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
     except Exception as e:
         mapped = ErrorMessageMapper.map(e)
         
-        # Emit error chuẩn cho frontend
         emit("complete", 0, "err", mapped["user_msg"], meta={
             "suggestion": mapped["suggestion"],
             "retry_possible": mapped["retry_possible"],
@@ -240,14 +269,18 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
                 json.dump(dump, f, ensure_ascii=False, indent=2)
             sys.stderr.write(f"💥 Crash dump saved\n")
             sys.stderr.flush()
-        except: pass
+        except: 
+            pass
         
         emit("complete", 0, "err", f"❌ Pipeline failed: {str(e)}")
         raise e
+    
     finally:
+        # 🔥 Cleanup toàn bộ GPU memory
         gc.collect()
         if torch.cuda.is_available(): 
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()
         from src.infrastructure.ai.whisper_cache import WhisperModelCache
         WhisperModelCache.clear_all()
 
