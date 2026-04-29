@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "sidecar-permission",
+  "description": "Cấp quyền cho Tauri gọi AI Backend",
+  "windows": ["*"],
+  "permissions": [
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "smart-video-pro-backend",
+          "sidecar": true,
+          "args": true
+        }
+      ]
+    }
+  ]
+}

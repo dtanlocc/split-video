@@ -1,0 +1,41 @@
+# NuitkaShield config cho smart-video-pro
+# Đặt file này tại: autoclip-tool/nuitkashield/config/shield_config.yaml
+
+project:
+  name: "smart-video-pro"
+  entry: "main_cli.py"
+  backend_dir: "../smart-video-pro"
+
+build:
+  output_dir: "../../dist"
+  output_name: "smart-video-pro"
+  console: true           # CLI tool → cần console
+  lto: true
+  jobs: 0                 # 0 = auto-detect cores
+
+obfuscation:
+  aggressiveness: "medium"   # low | medium | high
+  encrypt_strings: true
+  mangle_names: true
+  inject_dead_code: true
+  control_flow_flatten: true  # Chỉ cho HIGH sensitivity files
+
+sensitivity_overrides:
+  # Thêm file mới vào đây nếu cần
+  high:
+    - "token_guard.py"
+    - "main_cli.py"
+    - "pipeline_manager.py"
+  medium:
+    - "gemini_engine.py"
+    - "highlight_orchestrator.py"
+    - "render_service.py"
+    - "yolo_service.py"
+    - "whisper_impl.py"
+    - "yolo_impl.py"
+  skip:
+    - "__init__.py"
+
+tauri_integration:
+  sidecar_name: "smart-video-pro"
+  copy_to: "../autoclip-app/src-tauri/binaries/"

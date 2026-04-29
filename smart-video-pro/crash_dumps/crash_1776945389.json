@@ -1,6 +1,0 @@
-{
-  "timestamp": 1776945389.4257665,
-  "video": "C:\\test\\City chief confronts county sheriff in a fiery clash over jurisdiction and notification..mp4",
-  "error": "YOLOImpl.__init__() got an unexpected keyword argument 'device'",
-  "traceback": "Traceback (most recent call last):\n  File \"C:\\TOOL-AUTOCLIP\\smart-video-pro\\src\\application\\pipeline_manager.py\", line 152, in run_pipeline_isolated\n    cropper = YOLOImpl(\n              ^^^^^^^^^\nTypeError: YOLOImpl.__init__() got an unexpected keyword argument 'device'\n"
-}

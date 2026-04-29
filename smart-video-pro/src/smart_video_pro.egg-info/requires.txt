@@ -1,0 +1,12 @@
+av>=17.0.1
+opencv-python-headless>=4.13.0.92
+srt>=3.5.3
+ultralytics>=8.4.39
+openai-whisper>=20250625
+faster-whisper>=1.2.1
+stable-ts>=2.19.1
+google-genai>=1.73.1
+langcodes>=3.5.1
+langdetect>=1.0.9
+language-data>=1.4.0
+py-machineid>=1.0.0

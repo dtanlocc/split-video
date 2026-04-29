@@ -62,12 +62,14 @@ class GeminiEngine:
                     model=self.model_name,
                     contents=prompt,
                     config=types.GenerateContentConfig(
-                        safety_settings=self.safety_settings
+                        safety_settings=self.safety_settings,
+                        # 🔥 ÉP GEMINI TRẢ VỀ CHUẨN JSON 100%, KHÔNG MARKDOWN
+                        response_mime_type="application/json" 
                     )
                 )
                 if response and response.text:
+                    print(response.text)
                     print(f"✅ Gemini thành công (attempt {attempt+1})")
-                    return response
                 else:
                     print(f"⚠️ Gemini trả về rỗng (attempt {attempt+1})")
             except Exception as e:

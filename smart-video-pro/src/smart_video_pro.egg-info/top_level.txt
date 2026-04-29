@@ -1,0 +1,7 @@
+application
+core
+domain
+infrastructure
+main
+security
+tests

@@ -23,3 +23,10 @@ outputs/
 video/
 backup/
 # autoclip-app
+build/
+cu/
+scripts/
+resources/
+.shield_secrets.json
+test.ps1
+

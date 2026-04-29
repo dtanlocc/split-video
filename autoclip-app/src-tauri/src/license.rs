@@ -57,9 +57,17 @@ pub fn get_hwid() -> String {
     ];
 
     for cmd in cmds {
-        let out = Command::new("powershell")
-            .args(["-NoProfile", "-Command", cmd])
-            .output();
+        let mut command = Command::new("powershell");
+        command.args(["-NoProfile", "-Command", cmd]);
+
+        // ✅ GẮN CỜ TÀNG HÌNH CHO WINDOWS Ở ĐÂY
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000); // 0x08000000 = CREATE_NO_WINDOW
+        }
+
+        let out = command.output();
 
         match out {
             Ok(o) => {

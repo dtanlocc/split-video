@@ -325,17 +325,14 @@ function LicenseActivationScreen({ onActivated }: { onActivated: (info: LicenseI
     if (!key.trim()) return;
     setLoading(true);
     try {
-      // Replace with actual API call
-      const mockInfo: LicenseInfo = {
-        status: "active",
-        plan: "starter",
-        quota_used: 0,
-        quota_limit: 10,
-        quota_remain: 10,
-        expires_at: null,
-        is_expired: false
-      };
-      onActivated(mockInfo);
+      // ✅ GỌI THẲNG VÀO HÀM RUST CỦA BẠN (license.rs)
+      const realInfo = await invoke<LicenseInfo>("activate_license", { key: key.trim() });
+      
+      // Nếu Rust báo thành công, đẩy data thật vào App
+      onActivated(realInfo); 
+    } catch (err) {
+      // Nếu Rust hoặc Supabase báo lỗi (sai key, hết hạn...), hiện thông báo
+      alert("❌ Lỗi kích hoạt: " + err);
     } finally {
       setLoading(false);
     }

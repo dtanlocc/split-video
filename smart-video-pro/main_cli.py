@@ -1,13 +1,51 @@
-# smart-video-pro/main_cli.py
 import sys
+import os
+
+# ==============================================================================
+# LÁ CHẮN CHỐNG "ĐẬP CHUỘT" (ANTI-WHACK-A-MOLE SHIELD)
+# Ép Nuitka không được vứt bỏ các thư viện lõi (Standard Libraries) 
+# mà bọn PyTorch, YOLO, Whisper rất hay "xài lén" ngầm.
+# ==============================================================================
+import zoneinfo
+import pdb
+import unittest
+import unittest.mock
+import cProfile
+import pstats
+import ctypes
+import sqlite3
+import multiprocessing
+import xml.etree.ElementTree
+import urllib.request
+# ==============================================================================
+
+# 1. CƠ CHẾ HYBRID VENV (PHẢI NẰM Ở ĐÂY)
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+EXTERNAL_VENV = os.path.join(BASE_DIR, ".venv", "Lib", "site-packages")
+if os.path.exists(EXTERNAL_VENV) and EXTERNAL_VENV not in sys.path:
+    sys.path.insert(0, EXTERNAL_VENV)
+
+# ==============================================================================
+# 2. BÂY GIỜ MỚI ĐƯỢC IMPORT CÁC THƯ VIỆN KHÁC
+# ==============================================================================
 import json
 import asyncio
 import argparse
-from pydantic import ValidationError
+import pdb
+from pydantic import ValidationError  # <--- BÂY GIỜ NÓ SẼ TÌM THẤY TRONG .VENV!
 
 from src.domain.schemas import RunPipelineRequest
 from src.application.pipeline_manager import PipelineManager
 from src.security.token_guard import verify_session_token
+
+# 3. FIX ĐƯỜNG DẪN PAYLOAD 
+def fix_path(path_str):
+    if not path_str: return path_str
+    return os.path.abspath(path_str.replace('\\', '/'))
 
 # =====================================================================
 # ENTRY POINT - FIX QUAN TRỌNG

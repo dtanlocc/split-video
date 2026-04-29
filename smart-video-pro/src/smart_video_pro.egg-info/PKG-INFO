@@ -1,0 +1,17 @@
+Metadata-Version: 2.1
+Name: smart-video-pro
+Version: 0.1.0
+Summary: AI-powered video processing backend
+Requires-Python: >=3.10
+Requires-Dist: av>=17.0.1
+Requires-Dist: opencv-python-headless>=4.13.0.92
+Requires-Dist: srt>=3.5.3
+Requires-Dist: ultralytics>=8.4.39
+Requires-Dist: openai-whisper>=20250625
+Requires-Dist: faster-whisper>=1.2.1
+Requires-Dist: stable-ts>=2.19.1
+Requires-Dist: google-genai>=1.73.1
+Requires-Dist: langcodes>=3.5.1
+Requires-Dist: langdetect>=1.0.9
+Requires-Dist: language-data>=1.4.0
+Requires-Dist: py-machineid>=1.0.0
