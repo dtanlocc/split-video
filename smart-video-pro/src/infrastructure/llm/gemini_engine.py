@@ -112,7 +112,7 @@ class GeminiEngine:
         prompt = (
             f"The following is a highlight from a video.\n"
             f"Write a **short, engaging title** in **{lang_name}**.\n"
-            f"- 9 to 15 words only.\n"
+            f"- 8 to 12 words only.\n"
             f"- One single natural sentence.\n"
             f"- No violent or sensitive words.\n"
             f"Return only the title, no extra text.\n\n"

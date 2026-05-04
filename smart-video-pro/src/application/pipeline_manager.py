@@ -1,5 +1,5 @@
 # smart-video-pro/src/application/pipeline_manager.py
-# 🔥 FIX: Tắt buffering Python ngay từ đầu
+# 🔥 FIX: Tắt buffering Python và Xử lý tên file/thư mục chống lỗi MAX_PATH
 import os
 import sys
 os.environ["PYTHONUNBUFFERED"] = "1"
@@ -11,6 +11,7 @@ import asyncio
 import json
 import traceback
 import argparse
+import re  # 🔥 Thêm thư viện xử lý chuỗi (Regex)
 from pathlib import Path
 import subprocess
 import gc
@@ -50,6 +51,14 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             sys.stderr.write(f"[ERR] {event.to_json()}\n")
             sys.stderr.flush()
 
+    # 🔥 HÀM LỌC TÊN: Xóa ký tự đặc biệt, lấy tối đa max_len ký tự
+    def sanitize_name(text: str, max_len: int = 20) -> str:
+        # Xóa các ký tự gây lỗi đường dẫn (giữ lại chữ, số, tiếng Việt, khoảng trắng, gạch ngang)
+        clean = re.sub(r'[\\/*?:"<>|.,!@#$%^&()]', '', str(text))
+        clean = clean.strip()
+        # Lấy giới hạn ký tự và loại bỏ khoảng trắng thừa ở đuôi
+        return clean[:max_len].strip() if clean else "video_clip"
+
     # Setup OS Priority
     try:
         p = psutil.Process(os.getpid())
@@ -57,7 +66,7 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
     except: 
         pass
 
-    # 🔥 Setup CUDA Bridge cho Windows
+    # Setup CUDA Bridge cho Windows
     if sys.platform == "win32":
         torch_lib_path = os.path.join(os.path.dirname(torch.__file__), "lib")
         if os.path.exists(torch_lib_path):
@@ -72,18 +81,20 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
                 if os.path.exists(src_p) and not os.path.exists(dst_p):
                     shutil.copy(src_p, dst_p)
 
-    # 🔥 Hiển thị thông tin GPU
+    # Hiển thị thông tin GPU
     if torch.cuda.is_available():
         props = torch.cuda.get_device_properties(0)
         emit("init", 1, "inf", f"🎮 GPU: {props.name} | VRAM: {props.total_memory/1024**3:.1f}GB")
         print(f"🎮 GPU: {props.name} | VRAM: {props.total_memory/1024**3:.1f}GB", flush=True)
 
     video_path = Path(req.video_path)
-    video_name = video_path.stem
+    
+    # 🔥 CHỐT CHẶN 1: Giới hạn tên thư mục làm việc 20 ký tự
+    video_name = video_path.stem[:20] 
     work_dir = output_base / video_name
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    emit("init", 5, "inf", f"Bắt đầu xử lý: {video_name}")
+    emit("init", 5, "inf", f"Bắt đầu xử lý (Folder: {video_name})")
 
     try:
         # BƯỚC 0: TÁCH AUDIO
@@ -116,14 +127,12 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
         transcriber.release_resources()
         del transcriber
         
-        # 🔥 Clear GPU cache sau mỗi bước lớn
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
         gc.collect()
 
         # BƯỚC 2: GEMINI HIGHLIGHT
-        # highlight_json = work_dir / f"highlights_{video_name}.json"
         emit("ai", 40, "inf", "Đang phân tích kịch bản bằng AI...")
         
         try:
@@ -138,6 +147,26 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             highlight_json = work_dir / f"highlights_{video_name}.json"
             if not highlight_json.exists():
                 raise Exception("AI không tạo ra được kịch bản Highlight nào!")
+                
+            # 🔥 CHỐT CHẶN 2: LÀM SẠCH JSON TRƯỚC KHI CẮT VIDEO
+            try:
+                with open(highlight_json, 'r', encoding='utf-8') as f:
+                    hl_data = json.load(f)
+
+                # Duyệt qua các highlight và gọt tiêu đề xuống 20 ký tự
+                list_items = hl_data if isinstance(hl_data, list) else hl_data.get('highlights', [])
+                for i, item in enumerate(list_items):
+                    if 'title' in item:
+                        clean_title = item['title'][:20]
+                        # Thêm index _1, _2 ở cuối để tránh ghi đè nếu 2 đoạn có tên giống nhau
+                        item['title'] = f"{clean_title}_{i+1}"
+
+                with open(highlight_json, 'w', encoding='utf-8') as f:
+                    json.dump(hl_data, f, ensure_ascii=False, indent=4)
+                    
+            except Exception as format_err:
+                emit("ai", 45, "inf", f"Cảnh báo: Không thể format tên JSON: {format_err}")
+
         except Exception as gemini_err:
             raise Exception(f"Lỗi AI Gemini: {str(gemini_err)}")
 
@@ -169,7 +198,6 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
 
             emit("crop", 76, "inf", f"✅ Tìm thấy {len(cut_files)} cảnh. Bắt đầu Virtual Cameraman...")
 
-            # 🔥 Tối ưu batch size dựa trên VRAM
             optimal_batch = hw.config["batch_size"]
             
             cropper = YOLOImpl(
@@ -185,7 +213,6 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
                 emit("crop", 77 + i*2, "inf", f"Processing clip {i}/{len(cut_files)}: {cut_file.name}")
                 cropper.process_video(cut_file, yolo_output_dir, config=req.crop_config)
                 
-                # 🔥 Clear cache sau mỗi video
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
@@ -241,7 +268,7 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
         final_dir.mkdir(exist_ok=True)
         renderer = VideoRendererImpl()
         render_service = RenderService(renderer)
-        render_service.render_all(yolo_output_dir, final_dir, config=req.render_config)
+        render_service.render_all(yolo_output_dir, final_dir, config=req.render_config, lang_code=req.stt_config.lang)
 
         emit("complete", 100, "ok", f"Hoàn tất xử lý video: {video_name}!")
         return "SUCCESS"
@@ -276,7 +303,6 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
         raise e
     
     finally:
-        # 🔥 Cleanup toàn bộ GPU memory
         gc.collect()
         if torch.cuda.is_available(): 
             torch.cuda.empty_cache()
@@ -296,7 +322,6 @@ class PipelineManager:
         self.is_running = False
 
     def emit(self, stage: str, pct: int, status: str, msg: str):
-        # 🔥 FIX: stage là string, không phải int
         log_obj = {"stage": stage, "pct": pct, "status": status, "msg": msg}
         sys.stdout.write(json.dumps(log_obj, ensure_ascii=False) + "\n")
         sys.stdout.flush()

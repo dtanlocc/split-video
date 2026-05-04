@@ -79,7 +79,7 @@ class RunPipelineRequest(BaseModel):
 class AppConfig(BaseModel):
     gemini_api_key:       str   = ""
     license_key:          str   = ""
-    lang_code:            str   = "vi"
+    lang_code:            str   = "en"
     whisper_model:        str   = "medium"
     whisper_device:       str   = "cuda"
     whisper_compute_type: str   = "float16"

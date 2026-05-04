@@ -16,7 +16,7 @@ class RenderService:
     def __init__(self, renderer: VideoRendererImpl):
         self.renderer = renderer
 
-    def render_all(self, input_dir: Path, output_dir: Path, config: RenderConfig = None):
+    def render_all(self, input_dir: Path, output_dir: Path, config: RenderConfig = None, lang_code: str = "en"):
         videos = list(input_dir.glob("*.mp4"))
         if not videos:
             print("⚠️ Không tìm thấy video nào.")
@@ -51,7 +51,7 @@ class RenderService:
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(self.renderer.process_single_video, video, output_dir, config): video 
+                executor.submit(self.renderer.process_single_video, video, output_dir, config, lang_code): video 
                 for video in videos
             }
             
