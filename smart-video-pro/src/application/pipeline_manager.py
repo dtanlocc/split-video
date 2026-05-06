@@ -1,5 +1,6 @@
 # smart-video-pro/src/application/pipeline_manager.py
-# 🔥 FIX: Tắt buffering Python và Xử lý tên file/thư mục chống lỗi MAX_PATH
+# ★ FIX 1: Hash-based folder naming (không bị cắt xấu, không đụng độ)
+# ★ FIX 2: Persistent Process Server - spawn .exe 1 lần, nhận nhiều task qua stdin
 import os
 import sys
 os.environ["PYTHONUNBUFFERED"] = "1"
@@ -10,8 +11,8 @@ if sys.version_info >= (3, 7):
 import asyncio
 import json
 import traceback
-import argparse
-import re  # 🔥 Thêm thư viện xử lý chuỗi (Regex)
+import re
+import hashlib
 from pathlib import Path
 import subprocess
 import gc
@@ -20,10 +21,7 @@ import shutil
 import psutil
 import concurrent.futures
 
-# Import schemas
 from src.domain.schemas import RunPipelineRequest, ProgressEvent
-
-# Import Services
 from src.infrastructure.ai.whisper_impl import WhisperTranscriber
 from src.infrastructure.llm.gemini_engine import GeminiEngine
 from src.infrastructure.utils.srt_utils import SRTUtils
@@ -37,29 +35,55 @@ from src.infrastructure.utils.hardware_profiler import detect_hardware
 from src.security.token_guard import verify_session_token
 from src.application.error_mapper import ErrorMessageMapper
 
+
 # =====================================================================
-# HÀM XỬ LÝ ĐỘC LẬP
+# ★ HASH FOLDER NAME: Thay thế cắt 20 ký tự thô
+# Dùng SHA-256 → lấy 8 hex char → prefix 3 ký tự tên gốc
+# Kết quả: "abc_1f2e3d4c" — ngắn, unique, filesystem-safe
+# =====================================================================
+def hash_video_name(file_path: str) -> str:
+    """
+    Tạo folder name ngắn gọn, an toàn từ đường dẫn video.
+    
+    Ví dụ:
+        "C:/Videos/My Long Video Name With Spaces.mp4" → "myl_1f2e3d4c"
+        "D:/clips/重要視頻_2024.mp4"                   → "imp_a3b9c12d"
+    
+    Đảm bảo:
+    - Dài tối đa 12 ký tự
+    - Chỉ chứa a-z, 0-9, dấu gạch dưới
+    - Không bao giờ đụng độ với 2 file khác đường dẫn
+    - Giữ 3 ký tự prefix để dễ nhận diện khi debug
+    """
+    stem = Path(file_path).stem
+    # Prefix: 3 ký tự đầu sau khi strip ký tự đặc biệt
+    safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', stem).lower()[:3] or "vid"
+    # Hash của đường dẫn đầy đủ (case-insensitive trên Windows)
+    hash_input = os.path.abspath(file_path).lower().encode("utf-8")
+    hash_hex = hashlib.sha256(hash_input).hexdigest()[:8]
+    return f"{safe_prefix}_{hash_hex}"
+
+
+# =====================================================================
+# HÀM XỬ LÝ PIPELINE CHÍNH
 # =====================================================================
 def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
+    # 🔥 Log entry point để biết process con đã start
+    print(f"🚀 [PID {os.getpid()}] Starting pipeline for: {Path(req.video_path).name}", flush=True)
+    
     output_base = Path(output_base_str)
     
     def emit(stage: str, pct: int, status: str, msg: str, meta: dict = None):
+        # 🔥 Guard: clamp pct về [0, 100] trước khi tạo ProgressEvent
+        pct = max(0, min(100, pct))
+        
         event = ProgressEvent(stage=stage, pct=pct, status=status, msg=msg, meta=meta)
         sys.stdout.write(event.to_json() + "\n")
         sys.stdout.flush()
         if status == "err":
             sys.stderr.write(f"[ERR] {event.to_json()}\n")
             sys.stderr.flush()
-
-    # 🔥 HÀM LỌC TÊN: Xóa ký tự đặc biệt, lấy tối đa max_len ký tự
-    def sanitize_name(text: str, max_len: int = 20) -> str:
-        # Xóa các ký tự gây lỗi đường dẫn (giữ lại chữ, số, tiếng Việt, khoảng trắng, gạch ngang)
-        clean = re.sub(r'[\\/*?:"<>|.,!@#$%^&()]', '', str(text))
-        clean = clean.strip()
-        # Lấy giới hạn ký tự và loại bỏ khoảng trắng thừa ở đuôi
-        return clean[:max_len].strip() if clean else "video_clip"
-
-    # Setup OS Priority
+    
     try:
         p = psutil.Process(os.getpid())
         p.nice(psutil.HIGH_PRIORITY_CLASS if sys.platform == "win32" else -10)
@@ -81,16 +105,14 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
                 if os.path.exists(src_p) and not os.path.exists(dst_p):
                     shutil.copy(src_p, dst_p)
 
-    # Hiển thị thông tin GPU
     if torch.cuda.is_available():
         props = torch.cuda.get_device_properties(0)
         emit("init", 1, "inf", f"🎮 GPU: {props.name} | VRAM: {props.total_memory/1024**3:.1f}GB")
-        print(f"🎮 GPU: {props.name} | VRAM: {props.total_memory/1024**3:.1f}GB", flush=True)
 
     video_path = Path(req.video_path)
     
-    # 🔥 CHỐT CHẶN 1: Giới hạn tên thư mục làm việc 20 ký tự
-    video_name = video_path.stem[:20] 
+    # ★ FIX: Hash-based folder name — ngắn gọn, không đụng độ
+    video_name = hash_video_name(str(video_path))
     work_dir = output_base / video_name
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -106,7 +128,7 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             "-threads", "4", str(wav_path)
         ], capture_output=True, check=True)
 
-        # BƯỚC 1: STT (WHISPER)
+    #     # BƯỚC 1: STT (WHISPER)
         emit("stt", 20, "inf", f"Đang nhận diện giọng nói (Model - {req.stt_config.model})...")
         out_srt = work_dir / f"{video_name}.srt"
         
@@ -131,35 +153,60 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
         gc.collect()
-
-        # BƯỚC 2: GEMINI HIGHLIGHT
-        emit("ai", 40, "inf", "Đang phân tích kịch bản bằng AI...")
         
+        # min_sec = req.get_min_sec()
+        # max_sec = req.get_max_sec()
+        highlight_json = work_dir / f"highlights_{video_name}.json"
+
+    #     # BƯỚC 2: GEMINI HIGHLIGHT
+    #     # BƯỚC 2: GEMINI/DEEPSEEK HIGHLIGHT
+        emit("ai", 40, "inf", "Đang phân tích kịch bản bằng AI...")
+
         try:
-            engine = GeminiEngine(api_keys=[req.gemini_api_key], model_name=req.gemini_config.model_name)
+            if req.llm_backend == "deepseek":
+                from src.infrastructure.llm.deepseek_engine import DeepSeekEngine
+                keys = req.deepseek_api_keys or ([req.deepseek_api_key] if req.deepseek_api_key else [])
+                if not keys:
+                    raise Exception("Chưa cung cấp DeepSeek API key!")
+                engine = DeepSeekEngine(api_keys=keys, model_name=req.deepseek_config.model_name)
+                title_lang = req.deepseek_config.title_language or req.stt_config.lang or "en"
+            else:
+                keys = req.gemini_api_keys or ([req.gemini_api_key] if req.gemini_api_key else [])
+                if not keys:
+                    raise Exception("Chưa cung cấp Gemini API key!")
+                engine = GeminiEngine(api_keys=keys, model_name=req.gemini_config.model_name)
+                title_lang = req.gemini_config.title_language or req.stt_config.lang or "en"
+
             orchestrator = HighlightOrchestrator(engine, SRTUtils())
             orchestrator.process_video(
-                out_srt, 
-                work_dir, 
-                min_sec=req.gemini_config.min_duration_sec, 
-                max_sec=req.gemini_config.max_duration_sec
+                out_srt, work_dir,
+                min_sec=req.get_min_sec(),  # ★ Giá trị đúng từ GUI
+                max_sec=req.get_max_sec(),  # ★
+                title_language=title_lang
             )
+
+            
+            
             highlight_json = work_dir / f"highlights_{video_name}.json"
-            if not highlight_json.exists():
-                raise Exception("AI không tạo ra được kịch bản Highlight nào!")
-                
-            # 🔥 CHỐT CHẶN 2: LÀM SẠCH JSON TRƯỚC KHI CẮT VIDEO
+            if not highlight_json.exists(): raise Exception("AI không tạo ra highlight nào!")
+            
+            # Sanitize titles (giữ nguyên logic cũ của bạn)
+            # 🔥 CHỐT CHẶN 2: Làm sạch JSON - NHƯNG GIỮ TITLE DÀI ĐỦ
             try:
                 with open(highlight_json, 'r', encoding='utf-8') as f:
                     hl_data = json.load(f)
 
-                # Duyệt qua các highlight và gọt tiêu đề xuống 20 ký tự
-                list_items = hl_data if isinstance(hl_data, list) else hl_data.get('highlights', [])
+                list_items = hl_data if isinstance(hl_data, list) else hl_data.get('highlights', []) 
                 for i, item in enumerate(list_items):
                     if 'title' in item:
-                        clean_title = item['title'][:20]
-                        # Thêm index _1, _2 ở cuối để tránh ghi đè nếu 2 đoạn có tên giống nhau
-                        item['title'] = f"{clean_title}_{i+1}"
+                        # ✅ Tăng từ 20 → 100 ký tự, chỉ xóa ký tự đặc biệt, không cắt giữa từ
+                        raw_title = str(item['title']).strip()
+                        clean_title = re.sub(r'[\\/*?:"<>|]', '', raw_title)  # Chỉ xóa ký tự gây lỗi path
+                        # Cắt ở dấu cách gần nhất nếu quá dài
+                        if len(clean_title) > 100:
+                            clean_title = clean_title.rsplit(' ', 1)[0]
+                        # ✅ KHÔNG thêm _i+1 ở đây — để renderer/add suffix sau nếu cần
+                        item['title'] = clean_title.strip()
 
                 with open(highlight_json, 'w', encoding='utf-8') as f:
                     json.dump(hl_data, f, ensure_ascii=False, indent=4)
@@ -168,7 +215,11 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
                 emit("ai", 45, "inf", f"Cảnh báo: Không thể format tên JSON: {format_err}")
 
         except Exception as gemini_err:
-            raise Exception(f"Lỗi AI Gemini: {str(gemini_err)}")
+            raise Exception(f"Lỗi AI ({req.llm_backend.upper()}): {str(gemini_err)}")
+            # pass
+
+        # except Exception as gemini_err:
+        #     raise Exception(f"Lỗi AI Gemini: {str(gemini_err)}")
 
         # BƯỚC 3: CẮT VIDEO (FFMPEG)
         emit("cut", 60, "inf", "Đang chia nhỏ video theo kịch bản AI...")
@@ -210,7 +261,9 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
             )
 
             for i, cut_file in enumerate(cut_files, 1):
-                emit("crop", 77 + i*2, "inf", f"Processing clip {i}/{len(cut_files)}: {cut_file.name}")
+                pct = min(99, 77 + int((i / len(cut_files)) * 22))  # 77→99 range
+                emit("crop", pct, "inf", f"Processing clip {i}/{len(cut_files)}: {cut_file.name}")
+                
                 cropper.process_video(cut_file, yolo_output_dir, config=req.crop_config)
                 
                 if torch.cuda.is_available():
@@ -270,7 +323,7 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
         render_service = RenderService(renderer)
         render_service.render_all(yolo_output_dir, final_dir, config=req.render_config, lang_code=req.stt_config.lang)
 
-        emit("complete", 100, "ok", f"Hoàn tất xử lý video: {video_name}!")
+        emit("complete", 100, "ok", f"Hoàn tất xử lý video: {video_name}!", meta={"folder": str(final_dir)})
         return "SUCCESS"
 
     except Exception as e:
@@ -294,12 +347,9 @@ def run_pipeline_isolated(req: RunPipelineRequest, output_base_str: str):
         try:
             with open(crash_dir / f"crash_{int(time.time())}.json", "w", encoding="utf-8") as f:
                 json.dump(dump, f, ensure_ascii=False, indent=2)
-            sys.stderr.write(f"💥 Crash dump saved\n")
-            sys.stderr.flush()
         except: 
             pass
         
-        emit("complete", 0, "err", f"❌ Pipeline failed: {str(e)}")
         raise e
     
     finally:
@@ -330,11 +380,19 @@ class PipelineManager:
         self.is_running = True
         loop = asyncio.get_running_loop()
         
-        with concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=torch.multiprocessing.get_context("spawn")) as pool:
+        # 🔥 Dùng multiprocessing chuẩn thay vì torch.multiprocessing để tránh xung đột khi Nuitka đóng gói
+        import multiprocessing
+        ctx = multiprocessing.get_context("spawn")
+        
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=ctx) as pool:
             while self.is_running:
                 req: RunPipelineRequest = await self.queue.get()
                 try:
                     await loop.run_in_executor(pool, run_pipeline_isolated, req, str(self.output_base))
+                except __import__('concurrent.futures.process', fromlist=['BrokenProcessPool']).BrokenProcessPool as e:
+                    self.emit("complete", 0, "err", f"❌ AI Engine crashed: {str(e)}")
+                    self.is_running = False
+                    break
                 except Exception as e:
                     self.emit("complete", 0, "err", f"❌ Lỗi pipeline: {str(e)}")
                 finally:

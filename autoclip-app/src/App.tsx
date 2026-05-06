@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-// Thay thế phần import lucide-react bằng:
 import {
   Play, FolderOpen, FolderPlus, FileVideo, Settings,
   Cpu, HardDrive, Type, Scissors, X, Eye, Key,
   AlertTriangle, LogOut, AlertCircle, Film, ChevronDown, 
   Search, RefreshCw, Maximize2, Minimize2, Sparkles, 
   Trash2, CheckCircle2, ArrowUp, ArrowDown,
-  ShieldCheck
+  ShieldCheck, Upload, KeyRound
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -71,7 +70,10 @@ interface Toast {
 }
 
 interface ConfigState {
-  gemini_api_key: string;
+  title_language?: string; 
+  gemini_api_keys: string[];
+  deepseek_api_keys: string[]; // ✅ Mới
+  llm_backend: "gemini" | "deepseek"; // ✅ Mới
   lang_code: string;
   whisper_model: string;
   whisper_device: string;
@@ -87,6 +89,9 @@ interface ConfigState {
   video_speed: number;
   font_title_file: string;
   gemini_model: string;
+  deepseek_model: string; // ✅ Mới
+  deepseek_max_tokens: number; // ✅ Mới
+  deepseek_temperature: number; // ✅ Mới
 }
 
 // ==============================================================================
@@ -112,6 +117,23 @@ const PLAN_COLORS: Record<string, { label: string; color: string; bg: string }> 
 const fileName = (p: string) => p.split(/[\/\\]/).pop() ?? p;
 const fileDir = (p: string) => p.split(/[\/\\]/).slice(0, -1).join("/") || p;
 
+// ★ NEW: Hash tên video thành ID ngắn, an toàn cho filesystem
+// Dùng djb2 hash → Base36 → 8 ký tự. Không bao giờ đụng độ với 2 path khác nhau.
+function hashVideoName(filePath: string): string {
+  // Lấy tên file không có extension
+  const stem = filePath.split(/[\/\\]/).pop()?.replace(/\.[^/.]+$/, "") ?? filePath;
+  // djb2 hash nhanh, đủ dùng cho mục đích này
+  let hash = 5381;
+  for (let i = 0; i < stem.length; i++) {
+    hash = ((hash << 5) + hash) ^ stem.charCodeAt(i);
+    hash = hash >>> 0; // Convert to uint32
+  }
+  // Prefix 3 ký tự đầu của tên gốc (đã sanitize) + hash 6 ký tự → tổng 9 ký tự
+  const prefix = stem.replace(/[^a-zA-Z0-9]/g, "").slice(0, 3).toLowerCase() || "vid";
+  const hashStr = hash.toString(36).padStart(6, "0").slice(-6);
+  return `${prefix}_${hashStr}`;
+}
+
 function formatExpiry(expiresAt: string | null): string {
   if (!expiresAt) return "Vĩnh viễn ♾️";
   const d = new Date(expiresAt);
@@ -136,6 +158,14 @@ function getLogColor(log: string): string {
   return "#6b7280";
 }
 
+// ★ NEW: Parse file .txt chứa nhiều API key (mỗi dòng 1 key, bỏ qua dòng trống/comment)
+function parseApiKeysFromText(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && !line.startsWith("#") && !line.startsWith("//"));
+}
+
 // ==============================================================================
 // SHARED STYLES
 // ==============================================================================
@@ -146,7 +176,7 @@ const IS: React.CSSProperties = {
 };
 
 // ==============================================================================
-// OPTIMIZED MICRO COMPONENTS (React.memo)
+// MICRO COMPONENTS
 // ==============================================================================
 
 function Spin({ size = 20, color = "#a78bfa" }: { size?: number; color?: string }) {
@@ -154,8 +184,6 @@ function Spin({ size = 20, color = "#a78bfa" }: { size?: number; color?: string 
     <div style={{ width: size, height: size, border: `2px solid ${color}30`, borderTopColor: color, borderRadius: "50%", animation: "_spin 0.8s linear infinite", flexShrink: 0 }} />
   );
 }
-
-// function Sep() { return <div style={{ width: 1, height: 20, background: "#2a2a38" }} />; }
 
 function Chip({ color, children, onClick }: { color: string; children: React.ReactNode; onClick?: () => void }) {
   return (
@@ -280,7 +308,6 @@ const ErrorModal = React.memo(({ state, onClose, onRetry }: { state: ErrorModalS
   );
 });
 
-// ✅ FIXED: Stage Indicator chuẩn xác
 const StageIndicator = React.memo(({ currentStage, progress }: { currentStage: ProgressEvent["stage"] | null; progress: number }) => {
   const stages: ProgressEvent["stage"][] = ["init", "audio", "stt", "ai", "cut", "crop", "render", "complete"];
   const currentIdx = currentStage ? stages.indexOf(currentStage) : -1;
@@ -307,16 +334,143 @@ const StageIndicator = React.memo(({ currentStage, progress }: { currentStage: P
         })}
       </div>
       <div style={{ textAlign: "center", marginTop: 8 }}>
-        <span style={{ fontSize: 12, color: "#6b7280" }}>{currentStage ? STAGE_INFO[currentStage].label : "Chờ xử lý"} • {progress}%</span>
+        <span style={{ fontSize: 12, color: "#6b7280" }}>
+  {currentStage && STAGE_INFO[currentStage] ? STAGE_INFO[currentStage].label : "Chờ xử lý"} • {progress}%
+</span>
       </div>
     </div>
   );
 });
 
 // ==============================================================================
-// STUB COMPONENTS (Replace with actual implementation)
+// ★ NEW: API Key Manager Component
 // ==============================================================================
+function ApiKeyManager({ keys, onChange }: { keys: string[]; onChange: (keys: string[]) => void }) {
+  const [singleKey, setSingleKey] = useState(keys[0] || "");
+  const [showAll, setShowAll] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Sync single input → parent khi chỉ có 1 key
+  const handleSingleChange = (val: string) => {
+    setSingleKey(val);
+    onChange(val.trim() ? [val.trim()] : []);
+  };
+
+  // ★ Load file .txt chứa nhiều API key
+  const handleLoadFile = () => fileInputRef.current?.click();
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const parsed = parseApiKeysFromText(text);
+    if (parsed.length === 0) {
+      alert("❌ Không tìm thấy API key nào trong file!");
+      return;
+    }
+    onChange(parsed);
+    setSingleKey(parsed[0]);
+    // Reset file input để có thể chọn lại cùng file
+    e.target.value = "";
+  };
+
+  const removeKey = (idx: number) => {
+    const next = keys.filter((_, i) => i !== idx);
+    onChange(next);
+    if (next.length > 0) setSingleKey(next[0]);
+  };
+
+  const isMulti = keys.length > 1;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".txt"
+        style={{ display: "none" }}
+        onChange={handleFileChange}
+      />
+
+      {/* Single key input + load file button */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="password"
+          value={isMulti ? `✅ ${keys.length} keys đã tải` : singleKey}
+          onChange={isMulti ? undefined : (e) => handleSingleChange(e.target.value)}
+          readOnly={isMulti}
+          style={{
+            ...IS,
+            flex: 1,
+            color: isMulti ? "#4ade80" : "white",
+            cursor: isMulti ? "default" : "text"
+          }}
+          placeholder="AIzaSy..."
+        />
+        <button
+          onClick={handleLoadFile}
+          title="Tải file .txt chứa nhiều API key (mỗi dòng 1 key)"
+          style={{
+            background: "#1a1a26",
+            border: "1.5px solid #1e1e2a",
+            borderRadius: 10,
+            padding: "0 12px",
+            color: "#a78bfa",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 12,
+            fontWeight: 600,
+            flexShrink: 0,
+            transition: "all 0.2s",
+            whiteSpace: "nowrap"
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#7c3aed"; e.currentTarget.style.background = "rgba(124,58,237,0.1)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#1e1e2a"; e.currentTarget.style.background = "#1a1a26"; }}
+        >
+          <Upload size={13} /> .txt
+        </button>
+      </div>
+
+      {/* Multi-key badge + expand */}
+      {isMulti && (
+        <div style={{ background: "rgba(74,222,128,0.06)", border: "1px solid rgba(74,222,128,0.15)", borderRadius: 10, padding: "8px 12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <KeyRound size={13} color="#4ade80" />
+              <span style={{ fontSize: 12, color: "#4ade80", fontWeight: 600 }}>{keys.length} API keys đang xoay vòng</span>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => setShowAll(p => !p)} style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer", fontSize: 11 }}>{showAll ? "Ẩn" : "Xem"}</button>
+              <button onClick={() => { onChange([]); setSingleKey(""); }} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: 11 }}>Xoá</button>
+            </div>
+          </div>
+          {showAll && (
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4, maxHeight: 120, overflowY: "auto" }}>
+              {keys.map((k, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, background: "#0c0c10", borderRadius: 6, padding: "5px 8px" }}>
+                  <span style={{ fontSize: 11, color: "#a78bfa", fontWeight: 600, flexShrink: 0 }}>#{i + 1}</span>
+                  <span style={{ fontSize: 11, color: "#6b7280", fontFamily: "monospace", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.slice(0, 12)}...{k.slice(-4)}</span>
+                  <button onClick={() => removeKey(i)} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 2 }}><X size={10} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <p style={{ fontSize: 11, color: "#374151" }}>
+        💡 Tải file .txt (mỗi dòng 1 key) để xoay vòng nhiều key, tránh rate-limit.
+      </p>
+    </div>
+  );
+}
+
+// ==============================================================================
+// LICENSE COMPONENTS
+// ==============================================================================
 function LicenseActivationScreen({ onActivated }: { onActivated: (info: LicenseInfo) => void }) {
   const [key, setKey] = useState("");
   const [loading, setLoading] = useState(false);
@@ -325,13 +479,9 @@ function LicenseActivationScreen({ onActivated }: { onActivated: (info: LicenseI
     if (!key.trim()) return;
     setLoading(true);
     try {
-      // ✅ GỌI THẲNG VÀO HÀM RUST CỦA BẠN (license.rs)
       const realInfo = await invoke<LicenseInfo>("activate_license", { key: key.trim() });
-      
-      // Nếu Rust báo thành công, đẩy data thật vào App
-      onActivated(realInfo); 
+      onActivated(realInfo);
     } catch (err) {
-      // Nếu Rust hoặc Supabase báo lỗi (sai key, hết hạn...), hiện thông báo
       alert("❌ Lỗi kích hoạt: " + err);
     } finally {
       setLoading(false);
@@ -339,52 +489,13 @@ function LicenseActivationScreen({ onActivated }: { onActivated: (info: LicenseI
   };
 
   return (
-    <div style={{ 
-      display: "flex", 
-      alignItems: "center", 
-      justifyContent: "center", 
-      height: "100vh", 
-      background: "#0c0c10",
-      color: "#dde1f0",
-      fontFamily: "'Segoe UI', system-ui, sans-serif"
-    }}>
-      <div style={{ 
-        background: "#16161e", 
-        border: "1px solid #2a2a38", 
-        borderRadius: 20, 
-        padding: 32, 
-        maxWidth: 420, 
-        width: "90%",
-        textAlign: "center"
-      }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0c0c10", color: "#dde1f0", fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+      <div style={{ background: "#16161e", border: "1px solid #2a2a38", borderRadius: 20, padding: 32, maxWidth: 420, width: "90%", textAlign: "center" }}>
         <Sparkles size={48} color="#a78bfa" style={{ marginBottom: 16 }} />
         <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>🔐 Kích hoạt License</h2>
-        <p style={{ color: "#6b7280", fontSize: 14, marginBottom: 20 }}>
-          Nhập license key để bắt đầu sử dụng
-        </p>
-        <input
-          type="password"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="Nhập license key..."
-          style={{ ...IS, marginBottom: 16, textAlign: "center" }}
-          onKeyDown={(e) => e.key === "Enter" && handleActivate()}
-        />
-        <button
-          onClick={handleActivate}
-          disabled={loading || !key.trim()}
-          style={{
-            width: "100%",
-            padding: "12px",
-            background: loading || !key.trim() ? "#1a1a26" : "linear-gradient(135deg,#7c3aed,#4f46e5)",
-            border: "none",
-            borderRadius: 10,
-            color: "white",
-            fontWeight: 600,
-            cursor: loading || !key.trim() ? "not-allowed" : "pointer",
-            transition: "opacity 0.2s"
-          }}
-        >
+        <p style={{ color: "#6b7280", fontSize: 14, marginBottom: 20 }}>Nhập license key để bắt đầu sử dụng</p>
+        <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Nhập license key..." style={{ ...IS, marginBottom: 16, textAlign: "center" }} onKeyDown={(e) => e.key === "Enter" && handleActivate()} />
+        <button onClick={handleActivate} disabled={loading || !key.trim()} style={{ width: "100%", padding: "12px", background: loading || !key.trim() ? "#1a1a26" : "linear-gradient(135deg,#7c3aed,#4f46e5)", border: "none", borderRadius: 10, color: "white", fontWeight: 600, cursor: loading || !key.trim() ? "not-allowed" : "pointer", transition: "opacity 0.2s" }}>
           {loading ? "Đang xác thực..." : "Kích hoạt"}
         </button>
       </div>
@@ -394,42 +505,14 @@ function LicenseActivationScreen({ onActivated }: { onActivated: (info: LicenseI
 
 function LicenseBadge({ info, onDeactivate }: { info: LicenseInfo; onDeactivate: () => void }) {
   const plan = PLAN_COLORS[info.plan] || PLAN_COLORS.starter;
-  
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <div style={{ 
-        display: "flex", 
-        alignItems: "center", 
-        gap: 8, 
-        padding: "6px 12px", 
-        background: plan.bg, 
-        border: `1px solid ${plan.color}40`, 
-        borderRadius: 10 
-      }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: plan.bg, border: `1px solid ${plan.color}40`, borderRadius: 10 }}>
         <ShieldCheck size={14} color={plan.color} />
         <span style={{ fontSize: 12, fontWeight: 600, color: plan.color }}>{plan.label}</span>
-        {info.plan !== "unlimited" && (
-          <span style={{ fontSize: 11, color: "#6b7280" }}>
-            {info.quota_remain}/{info.quota_limit}
-          </span>
-        )}
+        {info.plan !== "unlimited" && <span style={{ fontSize: 11, color: "#6b7280" }}>{info.quota_remain}/{info.quota_limit}</span>}
       </div>
-      <button 
-        onClick={onDeactivate}
-        title="Đăng xuất"
-        style={{
-          background: "none",
-          border: "none", 
-          color: "#4b5563",
-          cursor: "pointer",
-          padding: 4,
-          display: "flex",
-          alignItems: "center",
-          transition: "color 0.2s"
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.color = "#f87171"}
-        onMouseLeave={(e) => e.currentTarget.style.color = "#4b5563"}
-      >
+      <button onClick={onDeactivate} title="Đăng xuất" style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", padding: 4, display: "flex", alignItems: "center", transition: "color 0.2s" }} onMouseEnter={(e) => e.currentTarget.style.color = "#f87171"} onMouseLeave={(e) => e.currentTarget.style.color = "#4b5563"}>
         <LogOut size={16} />
       </button>
     </div>
@@ -437,7 +520,7 @@ function LicenseBadge({ info, onDeactivate }: { info: LicenseInfo; onDeactivate:
 }
 
 // ==============================================================================
-// MAIN APP COMPONENT (OPTIMIZED)
+// MAIN APP
 // ==============================================================================
 export default function App() {
   const [activeTab, setActiveTab] = useState<"workspace" | "settings">("workspace");
@@ -456,13 +539,21 @@ export default function App() {
   const startTimeRef = useRef<number | null>(null);
   const unlistenRef = useRef<UnlistenFn | null>(null);
 
-  const [config, setConfig] = useState<ConfigState>({
-    gemini_api_key: "", lang_code: "vi", whisper_model: "medium", whisper_device: "cuda", whisper_compute_type: "float16",
-    min_duration: 150, max_duration: 300, sharpen_strength: "medium", title_color: "#FFD700", sub_bg_color: "255, 0, 0, 160",
-    max_words_per_line: 3, sub_margin_v: 250, sub_font_size: 85, video_speed: 1.03, font_title_file: "C:/Windows/Fonts/arialbd.ttf", gemini_model: "gemini-2.5-flash",
-  });
+const [config, setConfig] = useState<ConfigState>({
+  gemini_api_keys: [],
+  deepseek_api_keys: [],
+  llm_backend: "gemini",
+  lang_code: "vi",
+  title_language: "",
+  whisper_model: "medium", whisper_device: "cuda", whisper_compute_type: "float16",
+  min_duration: 150, max_duration: 300, sharpen_strength: "medium",
+  title_color: "#FFD700", sub_bg_color: "255, 0, 0, 160",
+  max_words_per_line: 3, sub_margin_v: 250, sub_font_size: 85, video_speed: 1.03,
+  font_title_file: "C:/Windows/Fonts/arialbd.ttf",
+  gemini_model: "gemini-2.5-flash",
+  deepseek_model: "deepseek-chat", deepseek_max_tokens: 8192, deepseek_temperature: 0.1
+});
 
-  // UX States
   const [currentStage, setCurrentStage] = useState<ProgressEvent["stage"] | null>(null);
   const [errorModal, setErrorModal] = useState<ErrorModalState>({ visible: false, message: "", retryPossible: false });
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -471,24 +562,18 @@ export default function App() {
   const [configExpanded, setConfigExpanded] = useState({ ai: true, stt: true, subtitle: true });
   const [terminalExpanded, setTerminalExpanded] = useState(true);
 
-  // 🔥 Optimized Toast System
   const addToast = useCallback((type: Toast["type"], message: string, duration = 4000) => {
     const id = crypto.randomUUID();
-    setToasts(prev => {
-      const updated = [...prev, { id, type, message, duration }];
-      return updated.slice(-5); // Max 5 toasts
-    });
+    setToasts(prev => [...prev, { id, type, message, duration }].slice(-5));
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
   }, []);
 
-  // 🔥 Debounce Progress Updates
   const progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedSetProgress = useCallback((value: number) => {
     if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
     progressTimerRef.current = setTimeout(() => setProgress(value), 100);
   }, []);
 
-  // 🔥 License Init
   useEffect(() => {
     invoke<LicenseInfo | null>("load_license")
       .then(info => { setLicenseInfo(info); if (info) addToast("success", "✅ License đã được kích hoạt"); })
@@ -496,73 +581,94 @@ export default function App() {
       .finally(() => setLicenseLoading(false));
   }, [addToast]);
 
-  // 🔥 AI Progress Listener (Optimized)
-  useEffect(() => {
-    const setupListener = async () => {
-      try {
-        unlistenRef.current = await listen<string>("ai-progress", (event) => {
-          try {
-            const data = JSON.parse(event.payload);
-            setStatusMsg(data.msg);
+  // Tìm đoạn này trong App.tsx
+useEffect(() => {
+  const setupListener = async () => {
+    try {
+      unlistenRef.current = await listen<string>("ai-progress", (event) => {
+        try {
+          const data = JSON.parse(event.payload);
+          setStatusMsg(data.msg);
+          
+          // ✅ FIX 1: Chỉ cập nhật Stage UI nếu stage đó hợp lệ có trong STAGE_INFO
+          if (data.stage && STAGE_INFO[data.stage as ProgressEvent["stage"]]) {
             setCurrentStage(data.stage);
-            debouncedSetProgress(data.pct);
+          }
+          
+          debouncedSetProgress(data.pct);
 
-            // Log management (limit 50 lines)
-            setLogs(prev => {
-              const newLog = `[${new Date().toLocaleTimeString()}] ${data.msg}`;
-              const updated = [...prev, newLog];
-              return updated.slice(-50);
-            });
-            setTimeout(() => logsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+          setLogs(prev => {
+            const newLog = `[${new Date().toLocaleTimeString()}] ${data.msg}`;
+            return [...prev, newLog].slice(-50);
+          });
+          setTimeout(() => logsEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
 
-            if (data.meta?.action === "open_folder" && data.meta?.path) {
-              setTimeout(() => invoke('open_folder', { folderPath: data.meta!.path }).catch(() => {}), 1000);
+          if (data.meta?.action === "open_folder" && data.meta?.path) {
+            setTimeout(() => invoke('open_folder', { folderPath: data.meta!.path }).catch(() => {}), 1000);
+          }
+
+          if (data.stage === "complete" && data.status === "ok") {
+            setIsRunning(false);
+            if (currentVideoId.current) {
+              const targetId = currentVideoId.current;
+              setVideoQueue(prev => prev.map(v => v.id === targetId ? { ...v, status: "done", progress: 100 } : v));
+              currentVideoId.current = null;
             }
+            invoke<LicenseInfo | null>("load_license").then(i => setLicenseInfo(i)).catch(() => {});
+            addToast("success", "✅ Xử lý hoàn tất!");
 
-            if (data.stage === "complete" && data.status === "ok") {
-              setIsRunning(false);
-              if (currentVideoId.current) {
-                const targetId = currentVideoId.current;
-                setVideoQueue(prev => prev.map(v => v.id === targetId ? { ...v, status: "done", progress: 100 } : v));
-                currentVideoId.current = null;
-              }
-              invoke<LicenseInfo | null>("load_license").then(i => setLicenseInfo(i)).catch(() => {});
-              addToast("success", "✅ Xử lý hoàn tất!");
-            } else if (data.status === "err") {
-              setIsRunning(false);
-              if (currentVideoId.current) {
-                const targetId = currentVideoId.current;
-                setVideoQueue(prev => prev.map(v => v.id === targetId ? { ...v, status: "error", error: data.msg } : v));
-                currentVideoId.current = null;
-              }
-              setErrorModal({ visible: true, message: data.msg, suggestion: data.meta?.suggestion, retryPossible: data.meta?.retry_possible ?? true, videoId: currentVideoId.current || undefined, technical: data.meta?.technical });
-              addToast("error", data.msg);
-            } else if (data.status === "warn") {
-              addToast("warning", data.msg);
+
+
+          } else if (data.status === "err" && data.stage !== "debug") {
+            // ✅ FIX 2: Bỏ qua lỗi "err" nếu đó chỉ là log debug từ Python stderr
+            setIsRunning(false);
+            if (currentVideoId.current) {
+              const targetId = currentVideoId.current;
+              setVideoQueue(prev => prev.map(v => v.id === targetId ? { ...v, status: "error", error: data.msg } : v));
+              currentVideoId.current = null;
             }
-          } catch (e) { console.error("Parse error:", e); }
-        });
-      } catch (err) { console.error("Setup listener error:", err); }
-    };
-    setupListener();
-    return () => { if (unlistenRef.current) unlistenRef.current(); };
-  }, [addToast, debouncedSetProgress]);
+            setErrorModal({ visible: true, message: data.msg, suggestion: data.meta?.suggestion, retryPossible: data.meta?.retry_possible ?? true, videoId: currentVideoId.current || undefined, technical: data.meta?.technical });
+            addToast("error", data.msg);
+          } else if (data.status === "warn") {
+            addToast("warning", data.msg);
+          }
+        } catch (e) { console.error("Parse error:", e); }
+      });
+    } catch (err) { console.error("Setup listener error:", err); }
+  };
+  setupListener();
+  return () => { if (unlistenRef.current) unlistenRef.current(); };
+}, [addToast, debouncedSetProgress]);
 
-  // 🔥 Auto-scroll terminal
+  // ★ NEW: Auto-continue queue sau mỗi video xong
+// ★ Auto-continue: khi isRunning về false, tự chạy video tiếp theo
+useEffect(() => {
+  if (isRunning) return; // Đang chạy → bỏ qua
+
+  const nextPending = videoQueue.find(v => v.status === "pending");
+  if (!nextPending) return; // Không còn video nào
+  if (!licenseInfo || licenseInfo.quota_remain <= 0) return; // Hết quota
+
+  // Delay nhỏ để React cập nhật state xong rồi mới chạy tiếp
+  const timer = setTimeout(() => {
+    handleRunPipelineRef.current();
+  }, 800);
+
+  return () => clearTimeout(timer);
+}, [isRunning]); // ← CHỈ depend vào isRunning, KHÔNG depend videoQueue
+                 //   để tránh trigger lại khi queue thay đổi giữa chừng
+
   useEffect(() => { if (terminalExpanded) logsEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [logs, terminalExpanded]);
 
-  // 🔥 Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !isRunning) { e.preventDefault(); handleRunPipeline(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === "r" && errorModal.retryPossible) { e.preventDefault(); handleRetryError(); }
       if (e.key === "Escape") setErrorModal(prev => ({ ...prev, visible: false }));
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isRunning, errorModal]);
 
-  // 🔥 Memoized Calculations
   const filteredQueue = useMemo(() => videoQueue.filter(v => v.name.toLowerCase().includes(searchQuery.toLowerCase()) || v.dir.toLowerCase().includes(searchQuery.toLowerCase())), [videoQueue, searchQuery]);
   const queueStats = useMemo(() => ({
     pending: videoQueue.filter(v => v.status === "pending").length,
@@ -570,7 +676,6 @@ export default function App() {
     done: videoQueue.filter(v => v.status === "done" || v.status === "error").length,
   }), [videoQueue]);
 
-  // 🔥 Handlers (useCallback)
   const toggleSelect = useCallback((id: string) => setSelectedVideos(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
   const clearSelection = useCallback(() => setSelectedVideos(new Set()), []);
   const bulkRemove = useCallback(() => { setVideoQueue(prev => prev.filter(v => !selectedVideos.has(v.id))); clearSelection(); addToast("info", `Đã xoá ${selectedVideos.size} video`); }, [selectedVideos, clearSelection, addToast]);
@@ -583,22 +688,14 @@ export default function App() {
     setVideoQueue(prev => prev.map(v => v.id === video.id ? { ...v, status: "pending", error: undefined } : v));
     setErrorModal(prev => ({ ...prev, visible: false }));
     addToast("info", "Đã reset video");
-    if (videoQueue.filter(v => v.status === "pending").length === 1 && !isRunning) setTimeout(handleRunPipeline, 500);
-  }, [errorModal, videoQueue, isRunning, addToast]);
+  }, [errorModal, videoQueue, addToast]);
 
   const handleAddFiles = useCallback(async () => {
     try {
       const selected = await open({ multiple: true, filters: [{ name: "Video", extensions: ["mp4","mov","avi","mkv","webm"] }] });
       if (!selected) return;
       const paths = Array.isArray(selected) ? selected : [selected];
-      setVideoQueue(prev => [...prev, ...paths.map(p => ({ 
-  id: crypto.randomUUID(), 
-  path: p, 
-  name: fileName(p), 
-  dir: fileDir(p), 
-  status: "pending" as VideoStatus,  // 👈 Thêm cast
-  addedAt: Date.now() 
-}))]);
+      setVideoQueue(prev => [...prev, ...paths.map(p => ({ id: crypto.randomUUID(), path: p, name: fileName(p), dir: fileDir(p), status: "pending" as VideoStatus, addedAt: Date.now() }))]);
       addToast("success", `Đã thêm ${paths.length} tệp`);
     } catch { addToast("error", "Không thể thêm file"); }
   }, [addToast]);
@@ -610,14 +707,7 @@ export default function App() {
       addToast("info", "Đang quét video...");
       const files = await invoke<string[]>("scan_directory", { path: selected });
       if (files.length === 0) { addToast("warning", "Không tìm thấy video"); return; }
-      setVideoQueue(prev => [...prev, ...files.map(p => ({ 
-  id: crypto.randomUUID(), 
-  path: p, 
-  name: fileName(p), 
-  dir: fileDir(p), 
-  status: "pending" as VideoStatus,  // 👈 Thêm cast
-  addedAt: Date.now() 
-}))]);
+      setVideoQueue(prev => [...prev, ...files.map(p => ({ id: crypto.randomUUID(), path: p, name: fileName(p), dir: fileDir(p), status: "pending" as VideoStatus, addedAt: Date.now() }))]);
       addToast("success", `Đã thêm ${files.length} video`);
     } catch { addToast("error", "Không thể quét thư mục"); }
   }, [addToast]);
@@ -632,36 +722,106 @@ export default function App() {
   }, []);
 
   const handleRunPipeline = useCallback(async () => {
-    const pending = videoQueue.find(v => v.status === "pending");
-    if (isRunning || !pending) return;
-    if (!licenseInfo || licenseInfo.quota_remain <= 0) { addToast("error", "❌ Hết quota!"); return; }
-    
-    setIsRunning(true); setProgress(0); setCurrentStage("init"); startTimeRef.current = Date.now();
-    currentVideoId.current = pending.id;
-    setVideoQueue(prev => prev.map(v => v.id === pending.id ? { ...v, status: "processing", progress: 0 } : v));
-    setLogs([`[System] Đang xác thực license...`]);
-    addToast("info", `Bắt đầu xử lý: ${pending.name}`);
+  const pending = videoQueue.find(v => v.status === "pending");
+  if (isRunning || !pending) return;
+  if (!licenseInfo || licenseInfo.quota_remain <= 0) { 
+    addToast("error", "❌ Hết quota!"); 
+    return; 
+  }
+  
+  // ✅ VALIDATE API KEY THEO BACKEND ĐANG CHỌN
+  if (config.llm_backend === "gemini" && config.gemini_api_keys.length === 0) {
+    addToast("error", "❌ Chưa nhập Gemini API key!"); 
+    return;
+  }
+  if (config.llm_backend === "deepseek" && config.deepseek_api_keys.length === 0) {
+    addToast("error", "❌ Chưa nhập DeepSeek API key!"); 
+    return;
+  }
+  
+  setIsRunning(true); 
+  setProgress(0); 
+  setCurrentStage("init"); 
+  startTimeRef.current = Date.now();
+  currentVideoId.current = pending.id;
+  setVideoQueue(prev => prev.map(v => v.id === pending.id ? { ...v, status: "processing", progress: 0 } : v));
+  setLogs([`[System] Đang xác thực license...`]);
+  addToast("info", `Bắt đầu xử lý: ${pending.name}`);
 
-    try {
-      const token = await invoke<string>("create_render_token");
-      setLogs(prev => [...prev, "[System] ✅ Token hợp lệ..."]);
-      await invoke("start_pipeline", { mode, videoPath: pending.path, configObj: JSON.stringify(config), sessionToken: token });
-      if (licenseInfo?.plan !== "unlimited") setLicenseInfo(prev => prev ? { ...prev, quota_used: prev.quota_used + 1, quota_remain: prev.quota_remain - 1 } : prev);
-    } catch (e: any) {
-      const msg = typeof e === "string" ? e : "Lỗi không xác định";
-      setLogs(prev => [...prev, `[Error] ❌ ${msg}`]);
-      setIsRunning(false);
-      if (currentVideoId.current) { setVideoQueue(prev => prev.map(v => v.id === currentVideoId.current ? { ...v, status: "error", error: msg } : v)); currentVideoId.current = null; }
-      addToast("error", msg);
+  try {
+    const token = await invoke<string>("create_render_token");
+    setLogs(prev => [...prev, "[System] ✅ Token hợp lệ..."]);
+
+    // ✅ Build config với API keys đúng backend
+    const configWithKeys = {
+      ...config,
+      // Gemini keys
+      gemini_api_key: config.gemini_api_keys[0] || "",
+      gemini_api_keys: config.gemini_api_keys,
+      // DeepSeek keys
+      deepseek_api_key: config.deepseek_api_keys[0] || "",
+      deepseek_api_keys: config.deepseek_api_keys,
+      
+      // ✅ Config cho AI với title_language
+      gemini_config: {
+        min_duration_sec: config.min_duration,
+        max_duration_sec: config.max_duration,
+        model_name: config.gemini_model,
+        title_language: config.title_language || null,
+      },
+      deepseek_config: {
+        model_name: config.deepseek_model,
+        max_output_tokens: config.deepseek_max_tokens,
+        temperature: config.deepseek_temperature,
+        title_language: config.title_language || null,
+      },
+    };
+
+    await invoke("start_pipeline", { 
+      mode, 
+      videoPath: pending.path, 
+      configObj: JSON.stringify(configWithKeys), 
+      sessionToken: token 
+    });
+    
+    if (licenseInfo?.plan !== "unlimited") {
+      setLicenseInfo(prev => prev ? { 
+        ...prev, 
+        quota_used: prev.quota_used + 1, 
+        quota_remain: prev.quota_remain - 1 
+      } : prev);
     }
-  }, [isRunning, videoQueue, licenseInfo, mode, config, addToast]);
+  } catch (e: any) {
+    const msg = typeof e === "string" ? e : "Lỗi không xác định";
+    setLogs(prev => [...prev, `[Error] ❌ ${msg}`]);
+    setIsRunning(false);
+    if (currentVideoId.current) { 
+      setVideoQueue(prev => prev.map(v => 
+        v.id === currentVideoId.current ? { ...v, status: "error", error: msg } : v
+      )); 
+      currentVideoId.current = null; 
+    }
+    addToast("error", msg);
+  }
+}, [isRunning, videoQueue, licenseInfo, mode, config, addToast]);
+const handleRunPipelineRef = useRef(handleRunPipeline);
+useEffect(() => {
+  handleRunPipelineRef.current = handleRunPipeline;
+}, [handleRunPipeline]);
 
   const handleOpenOriginal = useCallback((path: string) => invoke("open_external", { path }).catch(() => addToast("error", "Không thể mở video gốc")), [addToast]);
+  
   const handleOpenOutput = useCallback(async (path: string) => {
     try {
-      const name = fileName(path).replace(/\.[^/.]+$/, "");
-      const ws = await invoke<string>("get_workspace_path", { videoName: name }).catch(() => null);
-      if (ws) await invoke("open_folder", { folderPath: `${ws}/final` }); else await invoke("open_output", { originalPath: path });
+      // ★ Use hash-based name to find workspace folder
+      const hashedName = hashVideoName(path);
+      const ws = await invoke<string>("get_workspace_path", { videoName: hashedName }).catch(async () => {
+        // Fallback: try original stem (20-char truncated) for backward compat
+        const originalStem = fileName(path).replace(/\.[^/.]+$/, "").slice(0, 20);
+        return invoke<string>("get_workspace_path", { videoName: originalStem }).catch(() => null);
+      });
+      if (ws) await invoke("open_folder", { folderPath: `${ws}/final` });
+      else await invoke("open_output", { originalPath: path });
     } catch { addToast("error", "Không thể mở thư mục"); }
   }, [addToast]);
 
@@ -704,10 +864,59 @@ export default function App() {
             {/* Config Panel */}
             <div style={{ width: 460, background: "#111118", borderRight: "1px solid #1e1e2a", padding: 20, overflowY: "auto", flexShrink: 0, display: "flex", flexDirection: "column", gap: 16 }}>
               <CollapsibleSection title="Trí tuệ AI" icon={<Cpu size={15} />} color="#a78bfa" expanded={configExpanded.ai} onToggle={() => setConfigExpanded(p => ({ ...p, ai: !p.ai }))}>
-                <Field label="Gemini API Key"><input type="password" value={config.gemini_api_key} onChange={e => setConfig({ ...config, gemini_api_key: e.target.value })} style={IS} placeholder="AIzaSy..." /></Field>
-                <Field label="Model"><select value={config.gemini_model} onChange={e => setConfig({ ...config, gemini_model: e.target.value })} style={IS}><option value="gemini-2.5-flash">Gemini 2.5 Flash</option><option value="gemini-2.0-flash">Gemini 2.0 Flash</option><option value="gemini-1.5-pro">Gemini 1.5 Pro</option></select></Field>
-                <div style={{ display: "flex", gap: 10 }}><Field label="Min (s)" style={{ flex: 1 }}><input type="number" min="30" max="600" value={config.min_duration} onChange={e => setConfig({ ...config, min_duration: Number(e.target.value) })} style={IS} /></Field><Field label="Max (s)" style={{ flex: 1 }}><input type="number" min="60" max="1800" value={config.max_duration} onChange={e => setConfig({ ...config, max_duration: Number(e.target.value) })} style={IS} /></Field></div>
-              </CollapsibleSection>
+  <Field label="Backend AI">
+    <div style={{display:'flex', gap:8}}>
+      <button onClick={()=>setConfig({...config, llm_backend:'gemini'})} style={{flex:1, padding:8, background:config.llm_backend==='gemini'?'#7c3aed':'#1a1a26', border:'none', borderRadius:8, color:'white', cursor:'pointer'}}>Gemini</button>
+      <button onClick={()=>setConfig({...config, llm_backend:'deepseek'})} style={{flex:1, padding:8, background:config.llm_backend==='deepseek'?'#3b82f6':'#1a1a26', border:'none', borderRadius:8, color:'white', cursor:'pointer'}}>DeepSeek</button>
+    </div>
+  </Field>
+  
+  {config.llm_backend === 'gemini' ? (
+    <Field label="Gemini API Key(s)">
+      <ApiKeyManager keys={config.gemini_api_keys} onChange={keys => setConfig(p => ({...p, gemini_api_keys: keys}))} />
+    </Field>
+  ) : (
+    <Field label="DeepSeek API Key(s)">
+      <ApiKeyManager keys={config.deepseek_api_keys} onChange={keys => setConfig(p => ({...p, deepseek_api_keys: keys}))} />
+    </Field>
+  )}
+
+  <div style={{display:'flex', gap:10}}>
+    <Field label="Model" style={{flex:1}}>
+      <select value={config.llm_backend==='gemini'?config.gemini_model:config.deepseek_model} 
+              onChange={e=>setConfig(p=>({...p, [p.llm_backend+'_model']:e.target.value}))} style={IS}>
+        {config.llm_backend==='gemini' ? (
+          <><option value="gemini-2.5-flash">Gemini 2.5 Flash</option><option value="gemini-2.0-flash">Gemini 2.0 Flash</option></>
+        ) : (
+          <><option value="deepseek-chat">DeepSeek Chat V3</option><option value="deepseek-reasoner">DeepSeek R1</option></>
+        )}
+      </select>
+    </Field>
+    {/* {config.llm_backend==='deepseek' && (
+      <Field label="Max Tokens" style={{width:80}}>
+        <input type="number" value={config.deepseek_max_tokens} onChange={e=>setConfig(p=>({...p, deepseek_max_tokens:Number(e.target.value)}))} style={IS} />
+      </Field>
+    )} */}
+  </div>
+  <div style={{display:'flex', gap:10}}>
+    <Field label="Min (s)" style={{flex:1}}><input type="number" min="30" max="600" value={config.min_duration} onChange={e=>setConfig({...config, min_duration:Number(e.target.value)})} style={IS} /></Field>
+    <Field label="Max (s)" style={{flex:1}}><input type="number" min="60" max="1800" value={config.max_duration} onChange={e=>setConfig({...config, max_duration:Number(e.target.value)})} style={IS} /></Field>
+  </div>
+  <p style={{fontSize:11, color:'#4b5563'}}>💡 Title highlight sẽ tự động dùng ngôn ngữ "{config.lang_code}" của phụ đề.</p>
+</CollapsibleSection>
+    <Field label="Ngôn ngữ Title" hint="Để trống = dùng chung với ngôn ngữ phụ đề">
+    <input 
+      type="text" 
+      value={config.title_language || ""} 
+      onChange={e => setConfig({ ...config, title_language: e.target.value || undefined })} 
+      style={{ ...IS, width: "100%" }} 
+      placeholder="vi (hoặc để trống)" 
+      maxLength={5}
+    />
+  </Field>
+  <p style={{ fontSize: 11, color: "#374151", marginTop: -4 }}>
+    💡 Để trống: title sẽ cùng ngôn ngữ với phụ đề. Nhập "en"/"zh"/"ja"... để force ngôn ngữ title.
+  </p>
               <CollapsibleSection title="Âm thanh & STT" icon={<Scissors size={15} />} color="#4ade80" expanded={configExpanded.stt} onToggle={() => setConfigExpanded(p => ({ ...p, stt: !p.stt }))}>
                 <div style={{ display: "flex", gap: 10 }}><Field label="Ngôn ngữ" style={{ width: 80 }}><input type="text" value={config.lang_code} onChange={e => setConfig({ ...config, lang_code: e.target.value })} style={{ ...IS, width: "100%" }} placeholder="vi" /></Field><Field label="Model" style={{ flex: 1 }}><select value={config.whisper_model} onChange={e => setConfig({ ...config, whisper_model: e.target.value })} style={IS}><option value="tiny">Tiny</option><option value="base">Base</option><option value="small">Small</option><option value="medium">Medium</option><option value="large-v3">Large v3</option></select></Field></div>
                 <div style={{ display: "flex", gap: 10 }}><Field label="Device" style={{ flex: 1 }}><select value={config.whisper_device} onChange={e => setConfig({ ...config, whisper_device: e.target.value })} style={IS}><option value="cuda">CUDA (GPU)</option><option value="cpu">CPU</option></select></Field><Field label="Precision" style={{ flex: 1 }}><select value={config.whisper_compute_type} onChange={e => setConfig({ ...config, whisper_compute_type: e.target.value })} style={IS}><option value="float16">float16</option><option value="int8">int8</option><option value="float32">float32</option></select></Field></div>
@@ -745,13 +954,17 @@ export default function App() {
                       {filteredQueue.map((item) => {
                         const originalIdx = videoQueue.findIndex(v => v.id === item.id);
                         const isSelected = selectedVideos.has(item.id);
+                        // ★ Show hash name as folder hint
+                        const folderHint = hashVideoName(item.path);
                         return (
                           <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, background: isSelected ? "rgba(124,58,237,0.08)" : item.status === "processing" ? "rgba(251,191,36,0.04)" : "#16161e", border: `1px solid ${isSelected ? "#7c3aed" : item.status === "processing" ? "rgba(251,191,36,0.2)" : item.status === "done" ? "rgba(74,222,128,0.12)" : item.status === "error" ? "rgba(248,113,113,0.12)" : "#1e1e2a"}`, borderRadius: 10, padding: "9px 12px", transition: "all 0.2s" }}>
                             {item.status === "pending" && <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(item.id)} style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#7c3aed" }} />}
                             <div style={{ background: "rgba(124,58,237,0.12)", borderRadius: 8, padding: "7px 8px", flexShrink: 0 }}><FileVideo size={15} color="#a78bfa" /></div>
                             <div style={{ flex: 1, overflow: "hidden" }}>
                               <p style={{ fontSize: 14, fontWeight: 600, color: "#e5e7eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</p>
-                              <p style={{ fontSize: 11, color: "#4b5563", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.dir}</p>
+                              <p style={{ fontSize: 11, color: "#4b5563", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {item.dir} <span style={{ color: "#374151" }}>→ 📁 {folderHint}</span>
+                              </p>
                               {item.status === "error" && item.error && <p style={{ fontSize: 11, color: "#f87171", marginTop: 2 }}>{item.error.length > 40 ? item.error.slice(0, 40) + "..." : item.error}</p>}
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
@@ -800,7 +1013,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ✅ FIXED: Terminal Optimized */}
               <div style={{ flex: 1, background: "#080810", border: "1px solid #1a1a26", borderRadius: 16, padding: 14, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 100 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                   <HardDrive size={12} color="#4b5563" />

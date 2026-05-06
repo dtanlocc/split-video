@@ -30,3 +30,7 @@ resources/
 .shield_secrets.json
 test.ps1
 
+prompt-B2.py
+smart-video-pro/workspace
+smart-video-pro/crash_dumps
+dist/

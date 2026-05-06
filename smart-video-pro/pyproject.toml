@@ -22,6 +22,7 @@ dependencies = [
     "ultralytics>=8.4.39",
     "astor>=0.8.1",
     "nuitka>=4.0.8",
+    "openai>=2.33.0",
 ]
 
 [[tool.uv.index]]

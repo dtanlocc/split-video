@@ -1,3 +1,4 @@
+# src/application/highlight_orchestrator.py
 import json
 import os
 import re
@@ -9,18 +10,13 @@ class HighlightOrchestrator:
         self.engine = engine
         self.utils = srt_utils
 
-    def _extract_json(self, text):
-        match = re.search(r"\[.*\]", text, re.DOTALL)
-        return json.loads(match.group(0)) if match else None
-
-    def process_video(self, srt_path: Path, output_dir: Path, min_sec: int, max_sec: int):
+    def process_video(self, srt_path: Path, output_dir: Path, min_sec: int, max_sec: int, title_language: str = "en"):
         video_name = srt_path.stem.replace(".English", "")
         out_path = output_dir / f"highlights_{video_name}.json"
 
         subtitle_text = srt_path.read_text(encoding="utf-8")
         subs = list(srt.parse(subtitle_text))
         
-        # Load existing data (resume)
         existing_data = []
         if out_path.exists():
             try:
@@ -30,37 +26,32 @@ class HighlightOrchestrator:
 
         processed_ranges = {(d["start"], d["end"]) for d in existing_data}
 
-        print(f"🧠 Gửi prompt tìm Highlight cho {video_name}...")
-        response = self.engine.safe_generate(self.engine.build_highlight_prompt(subtitle_text, min_sec, max_sec))
-        
-        if not response or not response.text:
-            print("❌ Gemini không trả về kết quả. Bỏ qua video này.")
-            return
-
-        segments = self._extract_json(response.text)
-        if not segments:
-            print("❌ Không extract được JSON từ Gemini.")
-            return
-
-        print(f"✅ Tìm được {len(segments)} đoạn highlight tiềm năng.")
+        # ✅ Build prompt với title_language
+        if hasattr(self.engine, 'analyze_highlights'):
+            # DeepSeek path
+            segments = self.engine.analyze_highlights(subtitle_text, min_sec, max_sec, title_language)
+        else:
+            # Gemini path
+            prompt = self.engine.build_highlight_prompt(subtitle_text, min_sec, max_sec, title_language)
+            raw = self.engine.safe_generate(prompt)
+            match = re.search(r'\[.*\]', raw, re.DOTALL) if raw else None
+            segments = json.loads(match.group(0)) if match else []
 
         for seg in segments:
             key = (seg["start"], seg["end"])
             if key in processed_ranges:
                 continue
-
-            chunk_text = self.utils.get_subs_in_range(subs, seg["start"], seg["end"])
-            seg["title"] = self.engine.generate_title(chunk_text)
-            
+            if not seg.get("title"):
+                chunk_text = self.utils.get_subs_in_range(subs, seg["start"], seg["end"])
+                # seg["title"] = self.engine.generate_title(chunk_text, target_language=title_language)
             existing_data.append(seg)
 
-            # Atomic Save
-            temp_path = out_path.with_suffix(".tmp")
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(existing_data, f, ensure_ascii=False, indent=2)
-            os.replace(temp_path, out_path)
-
-        print(f"💾 Đã lưu {len(existing_data)} highlight vào {out_path.name}")
+        # Atomic save
+        temp_path = out_path.with_suffix(".tmp")
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(existing_data, f, ensure_ascii=False, indent=2)
+        os.replace(temp_path, out_path)
+        print(f"💾 Đã lưu {len(existing_data)} highlight")
             
     # Trong HighlightOrchestrator.py
     def process_multiple(self, srt_dir: Path, output_dir: Path):
